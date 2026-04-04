@@ -84,7 +84,7 @@
       INTEGER(LONG)                   :: STRAIN_OUT_ERR_INDEX(MAX_STRESS_POINTS)
 
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = OFP3_STRN_NO_PCOMP_BEGEND
- 
+
                                                            ! Array of %errs from subr POLYNOM_FIT_STRE_STRN (only NUM_PTS vals used)
       REAL(DOUBLE)                    :: STRAIN_OUT_PCT_ERR(MAX_STRESS_POINTS)
 
@@ -147,10 +147,10 @@
                      ELSE
                         NUM_PTS(I) = 1
                      ENDIF
-                     ELOUT_STRN = IAND(ELOUT(J,INT_SC_NUM),IBIT(ELOUT_STRN_BIT))
-                     IF (ELOUT_STRN > 0) THEN
-                        NELREQ(I) = NELREQ(I) + NUM_PTS(I)
-                     ENDIF
+                  ELOUT_STRN = IAND(ELOUT(J,INT_SC_NUM),IBIT(ELOUT_STRN_BIT))
+                  IF (ELOUT_STRN > 0) THEN
+                     NELREQ(I) = NELREQ(I) + NUM_PTS(I)
+                  ENDIF
                   ENDIF
                ENDIF
             ENDDO
@@ -168,6 +168,8 @@
       OT4_DESCRIPTOR = 'Element strain'
 reqs7:DO I=1,METYPE
          IF (NELREQ(I) == 0) CYCLE reqs7
+         IF ((ELMTYP(I)(1:5) == 'TRIA3') .OR. (ELMTYP(I)(1:5) == 'QUAD4') .OR. (ELMTYP(I)(1:5) == 'QUAD8') .OR.          &
+             (ELMTYP(I)(1:5) == 'SHEAR') .OR. (ELMTYP(I)(1:6) == 'USERIN')) CYCLE reqs7
          NUM_OGEL_ROWS = 0
          NUM_OGEL = 0
 elems_7: DO J = 1,NELE

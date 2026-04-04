@@ -92,12 +92,14 @@
 
       OT4_EROW = 0
 !     IF (ANY_STRE_OUTPUT > 0) THEN
+         CALL OFP3_STRE_NO_PCOMP ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )
          CALL OFP3_STRE_PCOMP    ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )  ! OES1C
          ! shell stress output is handled in OFP3_SHELL_NO_PCOMP
 !     ENDIF
 
       OT4_EROW = 0
 !     IF (ANY_STRN_OUTPUT > 0) THEN
+         CALL OFP3_STRN_NO_PCOMP ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )
          CALL OFP3_STRN_PCOMP    ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )  ! OSTR1C
          ! shell strain output is handled in OFP3_SHELL_NO_PCOMP
 !     ENDIF

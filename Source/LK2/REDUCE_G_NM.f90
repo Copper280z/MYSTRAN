@@ -28,7 +28,7 @@
 
 ! Call routines to reduce stiffness, mass, loads and constraint matrices from G-set to N, M-sets
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  ERR, F04, F06, L1C, LINK1C, L1C_MSG, SC1, WRT_ERR, WRT_LOG
 
       USE SCONTR, ONLY                :  LINKNO    , NDOFG, NDOFN, NDOFM, NGRID, NSUB,                                             &
@@ -55,6 +55,8 @@
       USE SPARSE_MATRICES, ONLY       :  SYM_KNN
       USE OUTPUT4_MATRICES, ONLY      :  ACT_OU4_MYSTRAN_NAMES, NUM_OU4_REQUESTS
       USE SCRATCH_MATRICES
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END,         &
+                                         HOTSPOT_WALL_TIME
 
       USE REDUCE_G_NM_USE_IFs
 
@@ -84,6 +86,8 @@
       INTEGER(LONG)                   :: SA_SET_COL          ! Col no. in array TDOF where the SA-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   :: TOT_NUM_ASPC        ! Sum of NUM_ASPC_BY_COMP(6)
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = REDUCE_G_NM_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
       REAL(DOUBLE)                    :: KNN_DIAG(NDOFN)     ! Diagonal terms from KNN
       REAL(DOUBLE)                    :: KNN_MAX_DIAG        ! Max diag term from  KNN
       REAL(DOUBLE)                    :: KNND_DIAG(NDOFN)    ! Diagonal terms from KNND
@@ -92,6 +96,8 @@
       INTRINSIC                       :: DABS
 
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'REDUCE_G_NM', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -552,6 +558,8 @@
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
 
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
+
       RETURN
 
 ! **********************************************************************************************************************************
@@ -572,12 +580,13 @@
 ! Checks KNN to see if any rows are null for DOF's not already in the S or O-sets, and, if so, puts these in the SA set and
 ! reruns subr TDOF_PROC and writes the new TSET, TDOF, TDOFI tables to file L1C
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE SCONTR, ONLY                :  DATA_NAM_LEN, FATAL_ERR, NDOFG, NDOFSA, NGRID, NUM_PCHD_SPC1
       USE IOUNT1, ONLY                :  WRT_ERR, WRT_LOG, ERR, F04, F06, L1C, L1C_MSG, LINK1C, SPC, SPCFIL
       USE PARAMS, ONLY                :  AUTOSPC, AUTOSPC_INFO, AUTOSPC_NSET, PCHSPC1, PRTTSET, SPC1SID
       USE DOF_TABLES, ONLY            :  TDOF, TDOFI, TSET
       USE MODEL_STUF, ONLY            :  GRID, GRID_ID, GRID_SEQ
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
 
       IMPLICIT NONE
 
@@ -599,7 +608,12 @@
       INTEGER(LONG)                   :: R_SET_COL          ! Col no. in array TDOF where the  R-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   :: S_SET_COL          ! Col no. in array TDOF where the  S-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   :: OUNT(2)            ! File units to write messages to. Input to subr UNFORMATTED_OPEN
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_PHASE_T0
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'N_SET_AUTOSPC_PROC_1', HS_SLOT, HS_T0 )
+
       OUNT(1) = ERR
       OUNT(2) = F06
 
@@ -651,11 +665,13 @@
       CALL COUNTER_INIT('       Proc N-set DOF ', NDOFN)
 i_do: DO I=1,NDOFN
          IF (I_KNN(I+1) == I_KNN(I)) THEN                  ! If true, row i is null
+            CALL HOTSPOT_TIMER_BEGIN ( 'AUTOSPC/TDOFI_SEARCH/PROC1', HS_SLOT, HS_PHASE_T0 )
             J = N_SET_TDOFI_ROW(I)
             IF (J > 0) THEN
                IF (TDOFI(J,N_SET_COL) == I) THEN
                   IF ((TDOFI(J,S_SET_COL) == 0) .AND. (TDOFI(J,R_SET_COL) == 0)) THEN
                      NUM_N_SET_ROWS_NULL = NUM_N_SET_ROWS_NULL + 1
+                     CALL HOTSPOT_COUNTER_ADD ( 'AUTOSPC/NULL_ROWS_FOUND', INT(1,DBL_LONG) )
                      AGRID = TDOFI(J,1)
                      COMP  = TDOFI(J,2)
                      NUM_ASPC_BY_COMP(COMP) = NUM_ASPC_BY_COMP(COMP) + 1
@@ -685,6 +701,7 @@ i_do: DO I=1,NDOFN
                FATAL_ERR = FATAL_ERR + 1
                CALL OUTA_HERE ( 'Y' )
             ENDIF
+            CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_PHASE_T0 )
          ENDIF
          CALL COUNTER_PROGRESS(I)
       ENDDO i_do
@@ -724,12 +741,16 @@ i_do: DO I=1,NDOFN
 
          TDOF_MSG(1:)  = ' '
          TDOF_MSG(22:) = ASPC_SUM_MSG2(1:)
+         HS_PHASE_T0 = HOTSPOT_WALL_TIME()
          CALL TDOF_PROC ( TDOF_MSG )
+         CALL HOTSPOT_TIMER_ADD ( 'AUTOSPC/TDOF_PROC', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
 
          OUNT(1) = ERR
          OUNT(2) = F06
          CALL FILE_OPEN ( L1C, LINK1C, OUNT, 'REPLACE', L1C_MSG, 'WRITE_STIME', 'UNFORMATTED', 'WRITE', 'REWIND', 'Y', 'N', 'Y' )
+         HS_PHASE_T0 = HOTSPOT_WALL_TIME()
          CALL WRITE_DOF_TABLES
+         CALL HOTSPOT_TIMER_ADD ( 'AUTOSPC/WRITE_DOF_TABLES', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
          CALL FILE_CLOSE ( L1C, LINK1C, 'KEEP', 'Y' )
 
       ELSE
@@ -740,6 +761,8 @@ i_do: DO I=1,NDOFN
          ENDIF
 
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 ! **********************************************************************************************************************************
    56 FORMAT(64X,'DEGREE OF FREEDOM SET TABLE (TSET)')
 
@@ -770,7 +793,7 @@ i_do: DO I=1,NDOFN
 ! Checks KNN to see if any diag terms are small (compared to AUTOSPC_RAT) for DOF's not already in the S or O-sets, and, if so, puts
 ! these in the SA set and reruns subr TDOF_PROC and writes the new TSET, TDOF, TDOFI tables to file L1C
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE SCONTR, ONLY                :  DATA_NAM_LEN, NDOFN, NDOFG, NDOFSA, NGRID, NUM_PCHD_SPC1, PROG_NAME
       USE IOUNT1, ONLY                :  WRT_ERR, WRT_LOG, ERR, F04, F06, L1C, L1C_MSG, LINK1C, SPC, SPCFIL
       USE PARAMS, ONLY                :  AUTOSPC, AUTOSPC_INFO, AUTOSPC_NSET, AUTOSPC_RAT, PCHSPC1, PRTTSET, SPC1SID
@@ -778,6 +801,7 @@ i_do: DO I=1,NDOFN
       USE DOF_TABLES, ONLY            :  TDOF, TDOFI, TSET
       USE MODEL_STUF, ONLY            :  GRID, GRID_ID, GRID_SEQ
       USE SPARSE_MATRICES, ONLY       :  I_KFF, KFF
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
 
       IMPLICIT NONE
 
@@ -799,7 +823,12 @@ i_do: DO I=1,NDOFN
       INTEGER(LONG)                   :: R_SET_COL          ! Col no. in array TDOF where the  R-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   :: S_SET_COL          ! Col no. in array TDOF where the  S-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   :: OUNT(2)            ! File units to write messages to. Input to subr UNFORMATTED_OPEN
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_PHASE_T0
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'N_SET_AUTOSPC_PROC_2', HS_SLOT, HS_T0 )
+
       OUNT(1) = ERR
       OUNT(2) = F06
 
@@ -837,10 +866,12 @@ i_do: DO I=1,NDOFN
       CALL COUNTER_INIT('       Proc N-set DOF ', NDOFN)
 i_do: DO I=1,NDOFN
          IF ((DABS(KNN_DIAG(I)/KNN_MAX_DIAG) < AUTOSPC_RAT) .OR. (KNN_DIAG(I) < ZERO)) THEN
+            CALL HOTSPOT_TIMER_BEGIN ( 'AUTOSPC/TDOFI_SEARCH/PROC2', HS_SLOT, HS_PHASE_T0 )
 j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of TDOFI to find where this N-set row is null
                IF (TDOFI(J,N_SET_COL) == I) THEN
                   IF ((TDOFI(J,S_SET_COL) == 0) .AND. (TDOFI(J,R_SET_COL) == 0)) THEN
                      NUM_NSET_DOFS_SPCD = NUM_NSET_DOFS_SPCD + 1
+                     CALL HOTSPOT_COUNTER_ADD ( 'AUTOSPC/SMALL_DIAG_ROWS_FOUND', INT(1,DBL_LONG) )
                      AGRID = TDOFI(J,1)
                      COMP  = TDOFI(J,2)
                      NUM_ASPC_BY_COMP(COMP) = NUM_ASPC_BY_COMP(COMP) + 1
@@ -858,10 +889,12 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
                         NUM_PCHD_SPC1 = NUM_PCHD_SPC1 + 1
                      ENDIF
                      JSTART = J
+                     CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_PHASE_T0 )
                      EXIT j_do
                   ENDIF
                ENDIF
             ENDDO j_do
+            CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_PHASE_T0 )
          ENDIF
          CALL COUNTER_PROGRESS(I)
       ENDDO i_do
@@ -919,6 +952,8 @@ j_do:       DO J=JSTART,NDOFG                               ! Loop over rows of 
          ENDIF
 
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 ! **********************************************************************************************************************************
   56 FORMAT(64X,'DEGREE OF FREEDOM SET TABLE (TSET)')
 

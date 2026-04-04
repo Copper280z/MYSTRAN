@@ -72,7 +72,6 @@
       USE DOF_TABLES, ONLY            :  TSET, TDOF, TDOFI, TDOF_ROW_START, USET
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE MODEL_STUF, ONLY            :  EIG_N2, GRID, GRID_ID, GRID_SEQ, INV_GRID_SEQ
- 
       USE TDOF_PROC_USE_IFs
 
       IMPLICIT NONE
@@ -82,7 +81,7 @@
       CHARACTER(LEN=*), INTENT(IN)    :: TDOF_MSG          ! Message to be printed out regarding at what point in the run the TDOF,I
 !                                                            tables are printed out
       CHARACTER(  5*BYTE)             :: SET_NAME          ! A data set name for output purposes
- 
+
       INTEGER(LONG)                   ::  A_SET_COL        ! Col no. in array TDOF where the  A-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   ::  F_SET_COL        ! Col no. in array TDOF where the  F-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   ::  G_SET_COL        ! Col no. in array TDOF where the  G-set is (from subr TDOF_COL_NUM)
@@ -104,9 +103,11 @@
       INTEGER(LONG)                   :: I_USET_U2         ! Counter for USET U2
       INTEGER(LONG)                   :: IGRID             ! Internal grid number
       INTEGER(LONG)                   :: IROW              ! Row number in array TDOF or TDOFI
+      INTEGER(LONG)                   :: IERR              ! Allocation STAT value
       INTEGER(LONG)                   :: NUM_COMPS         ! Number of displ components (1 for SPOINT, 6 for physical grid)
+      INTEGER(LONG), ALLOCATABLE      :: GRID_NUM_COMPS(:) ! Number of components for each grid row
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = DOF_PROC_BEGEND
- 
+
 ! **********************************************************************************************************************************
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
@@ -121,6 +122,23 @@
 ! Call routine to calc what row in TDOF each grid's data begins
 
       CALL CALC_TDOF_ROW_START ( 'Y' )
+
+! Cache number of displacement components for each grid row so the TDOF passes do not rescan GRID
+
+      IF (NGRID > 0) THEN
+         ALLOCATE ( GRID_NUM_COMPS(NGRID), STAT=IERR )
+         IF (IERR /= 0) THEN
+            FATAL_ERR = FATAL_ERR + 1
+            WRITE(ERR,1314) SUBR_NAME, 'GRID_NUM_COMPS', IERR
+            WRITE(F06,1314) SUBR_NAME, 'GRID_NUM_COMPS', IERR
+            CALL OUTA_HERE ( 'Y' )
+         ENDIF
+         DO I = 1,NGRID
+            IGRID = INV_GRID_SEQ(I)
+            CALL GET_GRID_NUM_COMPS ( GRID_ID(IGRID), NUM_COMPS, SUBR_NAME )
+            GRID_NUM_COMPS(IGRID) = NUM_COMPS
+         ENDDO
+      ENDIF
 
 ! First, set NDOFG = LDOFG. It will be counted later.
 
@@ -150,7 +168,8 @@
       IROW = 0
       CALL COUNTER_INIT('       Process col 1-4 of TDOF', NGRID)
       DO I = 1,NGRID
-         CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+         IGRID = INV_GRID_SEQ(I)
+         NUM_COMPS = GRID_NUM_COMPS(IGRID)
          DO J = 1,NUM_COMPS
             IROW = IROW + 1
             TDOF(IROW,1) = GRID_ID(I)
@@ -168,7 +187,7 @@
 
       DO I=1,NGRID
          IGRID = INV_GRID_SEQ(I)
-         CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+         NUM_COMPS = GRID_NUM_COMPS(IGRID)
          DO J=1,NUM_COMPS
             IROW = TDOF_ROW_START(IGRID) + J - 1
             NDOFG = NDOFG + 1
@@ -194,7 +213,7 @@
          CALL COUNTER_INIT('       Process M -set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IF (TSET(IGRID,J) == 'M ') THEN
                   IROW = TDOF_ROW_START(IGRID) + J - 1
@@ -213,7 +232,7 @@
          CALL COUNTER_INIT('       Process SA-set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IF (TSET(IGRID,J) == 'SA') THEN
                   IROW = TDOF_ROW_START(IGRID) + J - 1
@@ -232,7 +251,7 @@
          CALL COUNTER_INIT('       Process SB-set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IF (TSET(IGRID,J) == 'SB') THEN
                   IROW = TDOF_ROW_START(IGRID) + J - 1
@@ -251,7 +270,7 @@
          CALL COUNTER_INIT('       Process SG-set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IF (TSET(IGRID,J) == 'SG') THEN
                   IROW = TDOF_ROW_START(IGRID) + J - 1
@@ -270,7 +289,7 @@
          CALL COUNTER_INIT('       Process SE-set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IF (TSET(IGRID,J) == 'SE') THEN
                   IROW = TDOF_ROW_START(IGRID) + J - 1
@@ -289,7 +308,7 @@
          CALL COUNTER_INIT('       Process O -set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IF (TSET(IGRID,J) == 'O ') THEN
                   IROW = TDOF_ROW_START(IGRID) + J - 1
@@ -308,7 +327,7 @@
          CALL COUNTER_INIT('       Process R -set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IF (TSET(IGRID,J) == 'R ') THEN
                   IROW = TDOF_ROW_START(IGRID) + J - 1
@@ -326,7 +345,7 @@
       CALL COUNTER_INIT('       Process N -set         ', NGRID)
       DO I=1,NGRID
          IGRID = INV_GRID_SEQ(I)
-         CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+         NUM_COMPS = GRID_NUM_COMPS(IGRID)
          DO J=1,NUM_COMPS
             IROW  = TDOF_ROW_START(IGRID) + J - 1
             IF ((TDOF(IROW,G_SET_COL) > 0) .AND. (TDOF(IROW,M_SET_COL) == 0)) THEN
@@ -346,7 +365,7 @@
          CALL COUNTER_INIT('       Process SZ-set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IROW  = TDOF_ROW_START(IGRID) + J - 1
                IF ((TDOF(IROW,SA_SET_COL) > 0) .OR. (TDOF(IROW,SB_SET_COL) > 0) .OR. (TDOF(IROW,SG_SET_COL) > 0)) THEN
@@ -367,7 +386,7 @@
          CALL COUNTER_INIT('       Process S -set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IROW  = TDOF_ROW_START(IGRID) + J - 1
                IF ((TDOF(IROW,SZ_SET_COL) > 0) .OR. (TDOF(IROW,SE_SET_COL) > 0)) THEN
@@ -387,7 +406,7 @@
       CALL COUNTER_INIT('       Process F -set         ', NGRID)
       DO I=1,NGRID
          IGRID = INV_GRID_SEQ(I)
-         CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+         NUM_COMPS = GRID_NUM_COMPS(IGRID)
          DO J=1,NUM_COMPS
             IROW  = TDOF_ROW_START(IGRID) + J - 1
             IF ((TDOF(IROW,N_SET_COL) > 0) .AND. (TDOF(IROW,S_SET_COL) == 0)) THEN
@@ -406,7 +425,7 @@
       CALL COUNTER_INIT('       Process A -set         ', NGRID)
       DO I=1,NGRID
          IGRID = INV_GRID_SEQ(I)
-         CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+         NUM_COMPS = GRID_NUM_COMPS(IGRID)
          DO J=1,NUM_COMPS
             IROW  = TDOF_ROW_START(IGRID) + J - 1
             IF ((TDOF(IROW,F_SET_COL) > 0) .AND. (TDOF(IROW,O_SET_COL) == 0)) THEN
@@ -425,7 +444,7 @@
       CALL COUNTER_INIT('       Process L -set         ', NGRID)
       DO I=1,NGRID
          IGRID = INV_GRID_SEQ(I)
-         CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+         NUM_COMPS = GRID_NUM_COMPS(IGRID)
          DO J=1,NUM_COMPS
             IROW  = TDOF_ROW_START(IGRID) + J - 1
             IF ((TDOF(IROW,A_SET_COL) > 0) .AND. (TDOF(IROW,R_SET_COL) == 0)) THEN
@@ -445,7 +464,7 @@
          CALL COUNTER_INIT('       Process U1-set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IF (USET(IGRID,J) == 'U1') THEN
                   IROW = TDOF_ROW_START(IGRID) + J - 1
@@ -464,7 +483,7 @@
          CALL COUNTER_INIT('       Process U2-set         ', NGRID)
          DO I=1,NGRID
             IGRID = INV_GRID_SEQ(I)
-            CALL GET_GRID_NUM_COMPS ( GRID_ID(INV_GRID_SEQ(I)), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID_NUM_COMPS(IGRID)
             DO J=1,NUM_COMPS
                IF (USET(IGRID,J) == 'U2') THEN
                   IROW = TDOF_ROW_START(IGRID) + J - 1
@@ -555,9 +574,11 @@
  1312 FORMAT(' *ERROR  1312: FOR SOL = ''GEN CB MODEL'' THERE MUST BE AN ',A,'-SET WITH AT LEAST NDOFR = 6 DOF''s.'                &
                     ,/,14X,' HOWEVER ONLY ',I1,' DOF''s WERE DEFINED ON BULK DATA SUPORT ENTRIES')
 
- 1313 format(' *ERROR  1313: FOR SOL = "MODES" OR "GEN CB MODEL" THE EIGRL ENTRY MUST HAVE THE NUMBER OF DESIRED MODES > 0 OR THE',&
+  1313 format(' *ERROR  1313: FOR SOL = "MODES" OR "GEN CB MODEL" THE EIGRL ENTRY MUST HAVE THE NUMBER OF DESIRED MODES > 0 OR THE',&
                            ' PROBLEM DOF SIZE'                                                                                     &
                     ,/,14X,' (NDOFL = ',I8,') MUST BE LESS THAT PARAM EIGESTL = ',I8,' (OR USE LARGER VALUE FOR PARAM EIGESTL)')
+
+ 1314 FORMAT(' *ERROR  1314: PROGRAMMING ERROR IN SUBROUTINE ',A,/,14X,' ALLOCATING ARRAY ',A,' FAILED WITH STAT = ',I8)
 
 12345 FORMAT(A, A)
 

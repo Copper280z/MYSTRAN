@@ -72,7 +72,6 @@
       USE DOF_TABLES, ONLY            :  TSET, TDOF, TDOFI, TDOF_ROW_START, USET
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE MODEL_STUF, ONLY            :  EIG_N2, GRID, GRID_ID, GRID_SEQ, INV_GRID_SEQ
- 
       USE TDOF_PROC_USE_IFs
 
       IMPLICIT NONE
@@ -82,7 +81,7 @@
       CHARACTER(LEN=*), INTENT(IN)    :: TDOF_MSG          ! Message to be printed out regarding at what point in the run the TDOF,I
 !                                                            tables are printed out
       CHARACTER(  5*BYTE)             :: SET_NAME          ! A data set name for output purposes
- 
+
       INTEGER(LONG)                   ::  A_SET_COL        ! Col no. in array TDOF where the  A-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   ::  F_SET_COL        ! Col no. in array TDOF where the  F-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   ::  G_SET_COL        ! Col no. in array TDOF where the  G-set is (from subr TDOF_COL_NUM)
@@ -106,7 +105,7 @@
       INTEGER(LONG)                   :: IROW              ! Row number in array TDOF or TDOFI
       INTEGER(LONG)                   :: NUM_COMPS         ! Number of displ components (1 for SPOINT, 6 for physical grid)
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = DOF_PROC_BEGEND
- 
+
 ! **********************************************************************************************************************************
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
@@ -555,9 +554,10 @@
  1312 FORMAT(' *ERROR  1312: FOR SOL = ''GEN CB MODEL'' THERE MUST BE AN ',A,'-SET WITH AT LEAST NDOFR = 6 DOF''s.'                &
                     ,/,14X,' HOWEVER ONLY ',I1,' DOF''s WERE DEFINED ON BULK DATA SUPORT ENTRIES')
 
- 1313 format(' *ERROR  1313: FOR SOL = "MODES" OR "GEN CB MODEL" THE EIGRL ENTRY MUST HAVE THE NUMBER OF DESIRED MODES > 0 OR THE',&
+  1313 format(' *ERROR  1313: FOR SOL = "MODES" OR "GEN CB MODEL" THE EIGRL ENTRY MUST HAVE THE NUMBER OF DESIRED MODES > 0 OR THE',&
                            ' PROBLEM DOF SIZE'                                                                                     &
                     ,/,14X,' (NDOFL = ',I8,') MUST BE LESS THAT PARAM EIGESTL = ',I8,' (OR USE LARGER VALUE FOR PARAM EIGESTL)')
+
 
 12345 FORMAT(A, A)
 

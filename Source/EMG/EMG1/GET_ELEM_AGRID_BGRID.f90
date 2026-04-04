@@ -28,12 +28,14 @@
 
 ! Gets element actual and internal grid numbers given the element's internal ID
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  WRT_ERR, WRT_LOG, ERR, F04, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, medat0_cuserin, MELGP, NGRID
       USE TIMDAT, ONLY                :  TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  GET_ELEM_AGRID_BGRID_BEGEND
       USE MODEL_STUF, ONLY            :  AGRID, BGRID, EDAT, EID, ELGP, EPNT, ETYPE, GRID, GRID_ID, TYPE
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN,                         &
+                                         HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
 
       USE GET_ELEM_AGRID_BGRID_USE_IFs
 
@@ -50,8 +52,13 @@
       INTEGER(LONG)                   :: I                 ! DO loop index
       INTEGER(LONG)                   :: DELTA             ! Offset in EDAT (from 1st record for an elem) where grid no's begin
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = GET_ELEM_AGRID_BGRID_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_PHASE_T0
 
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'GET_ELEM_AGRID_BGRID', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -72,6 +79,7 @@
 
       CALL GET_ELGP ( INT_ELEM_ID )
 
+      HS_PHASE_T0 = HOTSPOT_WALL_TIME()
       DO I=1,ELGP
          DELTA = 1
          IF (TYPE == 'BUSH    ') THEN                      ! 1st grid in EDAT for BUSH is at EPNTK+3 since "Num grids" is EPNTK+2
@@ -81,6 +89,8 @@
             DELTA = MEDAT0_CUSERIN - 1
          ENDIF
          AGRID(I) = EDAT(EPNTK+I+DELTA)
+         CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REQUIRED/TOTAL'                       , INT(1,DBL_LONG) )
+         CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REQUIRED/GET_ELEM_AGRID_BGRID_CONNECT', INT(1,DBL_LONG) )
          CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(I), BGRID(I) )
          IF (BGRID(I) == -1) THEN
             WRITE(ERR,1900) AGRID(I), EID, TYPE
@@ -90,12 +100,16 @@
             CYCLE
          ENDIF
       ENDDO
+      CALL HOTSPOT_TIMER_ADD ( 'GET_ELEM_AGRID_BGRID/CONNECT', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
 
 ! Test to determine if AGRID's are appropriate for the elem TYPE (do test only if grid exists)
 
       IF (CHECK_AGRID == 'Y') THEN
+         HS_PHASE_T0 = HOTSPOT_WALL_TIME()
          IF ((TYPE(1:4) /= 'ELAS') .AND. (TYPE /= 'USERIN  ')) THEN
             DO I=1,ELGP
+               CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/TOTAL'                        , INT(1,DBL_LONG) )
+               CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/GET_ELEM_AGRID_BGRID_CHECK'   , INT(1,DBL_LONG) )
                CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(I), GRID_ID_ROW_NUM )
                IF (GRID_ID_ROW_NUM > 0) THEN
                   IF (GRID(GRID_ID_ROW_NUM,6) /= 6) THEN
@@ -107,6 +121,7 @@
                ENDIF
             ENDDO
          ENDIF
+         CALL HOTSPOT_TIMER_ADD ( 'GET_ELEM_AGRID_BGRID/CHECK_AGRID', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
       ENDIF
 
       IF (IERR > 0) THEN
@@ -117,8 +132,10 @@
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9002) SUBR_NAME,TSEC
- 9002    FORMAT(1X,A,' END  ',F10.3)
+9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

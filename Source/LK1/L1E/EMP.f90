@@ -42,7 +42,7 @@
       USE PARAMS, ONLY                :  EPSIL, SPARSTOR
       USE SUBR_BEGEND_LEVELS, ONLY    :  EMP_BEGEND
       USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
-      USE MODEL_STUF, ONLY            :  AGRID, ELDT, ELDOF, ELGP, GRID_ID, NUM_EMG_FATAL_ERRS, ME, OELDT, PLY_NUM, TYPE
+      USE MODEL_STUF, ONLY            :  BGRID, ELDT, ELDOF, ELGP, GRID, NUM_EMG_FATAL_ERRS, ME, OELDT, PLY_NUM, TYPE
       USE EMS_ARRAYS, ONLY            :  EMS, EMSCOL, EMSKEY, EMSPNT
       USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN,                           &
                                          HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
@@ -120,6 +120,8 @@
       OPT(4) = 'N'                                         ! OPT(4) is for calc of KE-linear
       OPT(5) = 'N'                                         ! OPT(5) is for calc of PPE
       OPT(6) = 'N'                                         ! OPT(6) is for calc of KE-diff stiff
+
+      CALL TDOF_COL_NUM ( 'G ', G_SET_COL_NUM )
  
 ! Process the elements:
  
@@ -167,14 +169,12 @@
 
          EDOF_ROW_NUM = 0                                  ! Generate element DOF'S
          DO J = 1,ELGP
-!           CALL CALC_TDOF_ROW_NUM ( AGRID(J), ROW_NUM_START, 'N' )
             CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/TOTAL', INT(1,DBL_LONG) )
             CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/EMP'  , INT(1,DBL_LONG) )
-            CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(J), IGRID )
+            IGRID = BGRID(J)
             ROW_NUM_START = TDOF_ROW_START(IGRID)
             CALL GET_GRID_NUM_COMPS ( IGRID, NUM_COMPS, SUBR_NAME )
             DO K = 1,NUM_COMPS
-               CALL TDOF_COL_NUM ( 'G ',  G_SET_COL_NUM )
                TDOF_ROW_NUM       = ROW_NUM_START + K - 1
                EDOF_ROW_NUM       = EDOF_ROW_NUM + 1
                EDOF(EDOF_ROW_NUM) = TDOF(TDOF_ROW_NUM, G_SET_COL_NUM)

@@ -38,7 +38,7 @@
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE DOF_TABLES,ONLY             :  TDOF_ROW_START
-      USE MODEL_STUF, ONLY            :  GRID_ID
+      USE MODEL_STUF, ONLY            :  GRID, GRID_ID
       USE PARAMS, ONLY                :  EPSIL, PRTMASS, SUPINFO, WTMASS
       USE EMS_ARRAYS, ONLY            :  EMS, EMSCOL, EMSKEY, EMSPNT
       USE SPARSE_MATRICES, ONLY       :  I2_MGG, I_MGG, J_MGG, MGG, I_MGGC, J_MGGC, MGGC, I_MGGE, J_MGGE, MGGE,                    &
@@ -155,9 +155,7 @@ j_do0:   DO J = 1,NDOFG
 i_do: DO I = 1,NGRID
 
          GRID_NUM = GRID_ID(I)
-
-!xx      CALL CALC_TDOF_ROW_NUM ( GRID_NUM, IROW_START, 'N' )
-         CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GRID_NUM, IGRID )
+         IGRID = I
          ROW_NUM_START = TDOF_ROW_START(IGRID)
          CALL GET_GRID_NUM_COMPS ( I, NUM_COMPS, SUBR_NAME )
 k_do:    DO K=1,NUM_COMPS
@@ -342,13 +340,7 @@ j_do3:      DO J = 1,NUM
          DO K=1,NGRID
             CALL GET_GRID_NUM_COMPS ( K, NUM_COMPS, SUBR_NAME )
             IF (NUM_COMPS == 6) THEN                       ! Only do output for actual grids, not SPOINT's
-               CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GRID_ID(K), IGRID )
-               IF (IGRID == -1) THEN
-                  IERR      = IERR + 1
-                  FATAL_ERR = FATAL_ERR + 1
-                  WRITE(ERR,1314) 'GRID ', GRID_ID(K), ' CANNOT PROCESS GRID FOR DEBUG(36) OUTPUT'
-                  WRITE(F06,1314) 'GRID ', GRID_ID(K), ' CANNOT PROCESS GRID FOR DEBUG(36) OUTPUT'
-               ENDIF
+               IGRID = K
                CALL GET_GRID_6X6_MASS (  GRID_ID(K), IGRID, FOUND, GRID_MGG )
                WRITE(F06,1102) GRID_ID(K)
                DO I=1,3

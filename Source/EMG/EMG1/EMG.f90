@@ -56,6 +56,7 @@
       USE CONSTANTS_1, ONLY           :  CONV_DEG_RAD, CONV_RAD_DEG, ZERO, ONE
       USE MODEL_STUF, ONLY            :  CAN_ELEM_TYPE_OFFSET, EDAT, EID, EPNT, ETYPE, ISOLID, MATANGLE, NUM_EMG_FATAL_ERRS,       &
                                          PCOMP_PROPS, PLY_NUM, TE_IDENT, THETAM, TYPE, XEL, TE
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_OPT_MASK, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
 
       USE EMG_USE_IFs
       USE MITC8_Interface
@@ -82,12 +83,21 @@
       INTEGER(LONG)                   :: IORD_K             ! Integration order in Z direction for PENTA elements
       INTEGER(LONG)                   :: INT41,INT42        ! An integer used in getting MATANGLE
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = EMG_BEGEND
- 
+      INTEGER(LONG)                   :: HS_SLOT
+      INTEGER(LONG)                   :: HS_CALL_SLOT
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_CALL_T0
+      CHARACTER(LEN=128)              :: HS_CALL_NAME
+
 ! **********************************************************************************************************************************
       EPNTK = EPNT(INT_ELEM_ID)
       EID   = EDAT(EPNTK)
       TYPE  = ETYPE(INT_ELEM_ID)
       CALL IS_ELEM_PCOMP_PROPS ( INT_ELEM_ID )
+
+      CALL HOTSPOT_TIMER_BEGIN ( 'EMG', HS_SLOT, HS_T0 )
+      HS_CALL_NAME = 'EMG/CALL/' // TRIM(CALLING_SUBR) // '/' // TRIM(TYPE) // '/' // HOTSPOT_OPT_MASK(OPT)
+      CALL HOTSPOT_TIMER_BEGIN ( HS_CALL_NAME, HS_CALL_SLOT, HS_CALL_T0 )
  
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
@@ -315,6 +325,8 @@
           (OPT(6) == 'N')) THEN
          CALL OURTIM
          WRITE(F04,9002) SUBR_NAME,TSEC
+         CALL HOTSPOT_TIMER_END ( HS_CALL_SLOT, HS_CALL_T0 )
+         CALL HOTSPOT_TIMER_END ( HS_SLOT     , HS_T0 )
          RETURN
       ENDIF 
 
@@ -435,8 +447,11 @@
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9002) SUBR_NAME,TSEC
- 9002    FORMAT(1X,A,' END  ',F10.3)
+9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_CALL_SLOT, HS_CALL_T0 )
+      CALL HOTSPOT_TIMER_END ( HS_SLOT     , HS_T0 )
 
       RETURN
 

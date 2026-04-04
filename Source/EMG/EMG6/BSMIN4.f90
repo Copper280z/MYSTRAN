@@ -36,6 +36,7 @@
       USE SUBR_BEGEND_LEVELS, ONLY    :  BSMIN4_BEGEND
       USE MODEL_STUF, ONLY            :  EID, TYPE, XEB, XEL
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
   
       USE BSMIN4_USE_IFs
 
@@ -53,6 +54,8 @@
       INTEGER(LONG), PARAMETER        :: NR        = 2     ! An input to subr BCHECK, called herein
       INTEGER(LONG), PARAMETER        :: NC        = 12    ! An input to subr BCHECK, called herein
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = BSMIN4_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
   
       REAL(DOUBLE) , INTENT(IN)       :: PSH(4)            ! 4 node bilinear isopar interp functions (used for bending)
       REAL(DOUBLE) , INTENT(IN)       :: DPSHX(2,4)        ! Derivatives of PSH shape functions wrt x and y
@@ -64,6 +67,8 @@
       REAL(DOUBLE)                    :: XL(4,3)           ! First 4 rows of XEL
                                                            ! rigid body motions/constant strain distortions)
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'HELPER/BSMIN4', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC, WRT_BUG_THIS_TIME, WRT_BUG(7), WRT_BUG(8), WRT_BUG(9)
@@ -148,6 +153,8 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

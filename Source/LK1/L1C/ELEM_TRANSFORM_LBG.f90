@@ -33,7 +33,7 @@
 ! handled here after transforming their matrices from local-basic-global, since BAR and BEAM offsets are specified (in the input
 ! data) in global coordinates and the BUSH in a unique system
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  WRT_ERR, WRT_LOG, ERR, F04, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MELDOF, NCORD, NGRID, NSUB, NTSUB
       USE TIMDAT, ONLY                :  TSEC
@@ -41,6 +41,7 @@
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE MODEL_STUF, ONLY            :  AGRID, CORD, ELDOF, GRID, GRID_ID, KEG, TE_IDENT, TYPE
       USE MODEL_STUF, ONLY            :  ELGP
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
 
       USE ELEM_TRANSFORM_LBG_USE_IFs
 
@@ -65,6 +66,9 @@
       INTEGER(LONG), PARAMETER        :: NROW_GET  = 3     ! An input to subr MATGET/MATPUT (no. rows to get/put)
       INTEGER(LONG), PARAMETER        :: NROWA     = 3     ! An input to subr MATMULT_FFF/MATMULT_FFF_T, called herein
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = ELEM_TRANSFORM_LBG_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_PHASE_T0
  
       REAL(DOUBLE) , INTENT(INOUT)    :: QE(MELDOF,NSUB)   ! PTE or PPE if WHICH = 'PTE' or 'PPE'
       REAL(DOUBLE) , INTENT(INOUT)    :: ZE(MELDOF,MELDOF) ! Either the mass or stiff matrix of the element
@@ -77,6 +81,8 @@
       REAL(DOUBLE)                    :: TK(3,3)           ! Coord transform matrix from basic to global for an internal grid
  
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'ELEM_TRANSFORM_LBG', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -136,6 +142,8 @@ ke_me:IF ((WHICH == 'KE') .OR. (WHICH == 'KED') .OR. (WHICH == 'ME')) THEN
          NCOL_GET = 3
          NCOLB    = 3
 j_do1:   DO J=1,ELGP
+            CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/TOTAL', INT(1,DBL_LONG) )
+            CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/ELEM_TRANSFORM_LBG', INT(1,DBL_LONG) )
             CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(J), GRID_ID_ROW_NUM_J )
             ACIDJ = GRID(GRID_ID_ROW_NUM_J,3)
             IF (ACIDJ /= 0) THEN
@@ -165,6 +173,8 @@ k_do1:      DO K=J,ELGP
                      ENDDO 
                   ENDDO 
                ELSE 
+                  CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/TOTAL', INT(1,DBL_LONG) )
+                  CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/ELEM_TRANSFORM_LBG', INT(1,DBL_LONG) )
                   CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(K), GRID_ID_ROW_NUM_K )
                   ACIDK = GRID(GRID_ID_ROW_NUM_K,3)
                   IF (ACIDK /= 0) THEN
@@ -284,6 +294,8 @@ k_cord2:       DO K=1,NCORD
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

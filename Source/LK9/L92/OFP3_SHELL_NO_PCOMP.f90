@@ -29,7 +29,7 @@
 ! Combined non-PCOMP shell output driver for force, stress, and strain output.
 ! The fast path collapses the repeated EMG traversal for the standard F06/OP2 path.
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  WRT_BUG, WRT_LOG, ERR, F04, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, ELOUT_ELFE_BIT, ELOUT_STRE_BIT, ELOUT_STRN_BIT, FATAL_ERR, IBIT,           &
                                          INT_SC_NUM, MBUG, MOGEL, NELE, NCQUAD4, NCQUAD4K, NCSHEAR, NCTRIA3, NCTRIA3K, SOL_NAME, &
@@ -44,6 +44,7 @@
       USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX
       USE OUTPUT4_MATRICES, ONLY      :  OTM_STRE, TXT_STRE, OTM_STRN, TXT_STRN, OTM_ELFE, TXT_ELFE
       USE SUBR_BEGEND_LEVELS, ONLY    :  OFP3_BEGEND
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
       USE OFP3_ELFE_2D_USE_IFs
       USE OFP3_STRE_NO_PCOMP_USE_IFs
       USE OFP3_STRN_NO_PCOMP_USE_IFs
@@ -71,6 +72,7 @@
 
       INTEGER(LONG)                   :: I,J,K,M,R
       INTEGER(LONG)                   :: IERROR = 0
+      INTEGER(LONG)                   :: HS_SLOT
       INTEGER(LONG)                   :: NUM_PTS_ELFE(METYPE), NUM_PTS_STRE(METYPE), NUM_PTS_STRN(METYPE)
       INTEGER(LONG)                   :: NELREQ_ELFE(METYPE), NELREQ_STRE(METYPE), NELREQ_STRN(METYPE)
       INTEGER(LONG)                   :: NUM_ELFE_ROWS, NUM_STRE_ROWS, NUM_STRN_ROWS
@@ -87,6 +89,7 @@
       LOGICAL                         :: WRITE_NEU
       LOGICAL                         :: FAST_PATH
       REAL(DOUBLE)                    :: PCT_ERR_MAX
+      REAL(DOUBLE)                    :: HS_T0
       REAL(DOUBLE)                    :: STRESS_OUT_PCT_ERR(MAX_STRESS_POINTS)
       REAL(DOUBLE)                    :: STRAIN_OUT_PCT_ERR(MAX_STRESS_POINTS)
       REAL(DOUBLE)                    :: STRESS_RAW(9,MAX_STRESS_POINTS)
@@ -105,6 +108,8 @@
       INTRINSIC IAND
 
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'OFP3_SHELL_NO_PCOMP', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -308,6 +313,8 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

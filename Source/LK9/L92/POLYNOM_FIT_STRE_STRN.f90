@@ -39,6 +39,7 @@
       USE MODEL_STUF, ONLY            :  EID, ELGP, TYPE, XEL
       USE PARAMS, ONLY                :  Q4SURFIT, QUAD4TYP
       USE SUBR_BEGEND_LEVELS, ONLY    :  POLYNOM_FIT_STRE_STRN_BEGEND
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
 
       USE POLYNOM_FIT_STRE_STRN_USE_IFs
 
@@ -59,6 +60,8 @@
       INTEGER(LONG)                   :: OUNT(2)             ! Output units for SURFACE_FIT
       INTEGER(LONG)                   :: SF_IERR             ! Output error indicator from subr SURFACE_FIT
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = POLYNOM_FIT_STRE_STRN_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
 
       REAL(DOUBLE), INTENT(IN)        :: STR_IN(NROW,NCOL)   ! Input stress/strain vals. NROW are num of diff stress/strain vals and
 !                                                              NCOL are number of points to use in the poly fit for one value
@@ -92,6 +95,8 @@
       REAL(DOUBLE)                    :: WO(NCOL-1)          ! Values of the function to fit at the output data points
 
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'POLYNOM_FIT_STRE_STRN', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -192,6 +197,7 @@
 
       ELSE
 
+         CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
          RETURN
 
       ENDIF
@@ -202,6 +208,8 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 
@@ -215,4 +223,3 @@
 ! **********************************************************************************************************************************
 
       END SUBROUTINE POLYNOM_FIT_STRE_STRN
-

@@ -95,6 +95,7 @@
                                          ALLOW_OU4_OUTPUT_NAMES, HAS_OU4_MAT_BEEN_PROCESSED, NUM_OU4_REQUESTS,                     &
                                          NUM_OU4_VALID_NAMES, SUBR_WHEN_TO_WRITE_OU4_MATS
       USE COL_VECS, ONLY              :  UG_COL
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_PROFILER_INIT, HOTSPOT_WRITE_REPORT
 
       USE MYSTRAN_USE_IFs
 
@@ -135,6 +136,7 @@
 ! Set time initializing parameters
 
       CALL TIME_INIT
+      CALL HOTSPOT_PROFILER_INIT
 
 ! Read data in initialization file, MYSTRAN.INI, if it exists.
 
@@ -395,6 +397,8 @@ iters:      DO
 ! Write MYSTRAN END to BUG, ERR, F04, F06 and then close those files
 
       WRITE(F06,*)
+      CALL HOTSPOT_WRITE_REPORT ( F04 )
+      CALL HOTSPOT_WRITE_REPORT ( F06 )
       CALL CPU_TIME ( TIME_END )
       CPU_SECS = TIME_END - TIME_START
       WRITE(F06,200) CPU_SECS

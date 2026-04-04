@@ -50,6 +50,7 @@
                                          ERR_SUB_NAM, FCONV, KE, INTL_MID, PCOMP_LAM, PCOMP_PROPS, PHI_SQ, PPE,                    &
                                          PRESS, PTE, SE2, SE3, SHELL_D, SHELL_DALP, SHELL_T, SHRSUM, STE2, TYPE
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_OPT_MASK, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
  
       USE QPLT2_USE_IFs
 
@@ -94,6 +95,11 @@
       INTEGER(LONG), PARAMETER        :: NUM_NODES = 4     ! Quad has 4 nodes
                                                            ! Indicator of no output of elem data to BUG file
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = QPLT2_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      INTEGER(LONG)                   :: HS_CALL_SLOT
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_CALL_T0
+      CHARACTER(LEN=128)              :: HS_CALL_NAME
   
       REAL(DOUBLE) , INTENT(IN)       :: AREA              ! Element area
       REAL(DOUBLE) , INTENT(IN)       :: XSD(4)            ! Diffs in x coords of quad sides in local coords
@@ -139,6 +145,10 @@
       INTRINSIC                       :: DABS
   
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'QPLT2', HS_SLOT, HS_T0 )
+      HS_CALL_NAME = 'QPLT2/OPT/' // TRIM(HOTSPOT_OPT_MASK(OPT))
+      CALL HOTSPOT_TIMER_BEGIN ( HS_CALL_NAME, HS_CALL_SLOT, HS_CALL_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -396,7 +406,11 @@
 
 ! Return if IERROR > 0
 
-         IF (IERROR > 0) RETURN
+         IF (IERROR > 0) THEN
+            CALL HOTSPOT_TIMER_END ( HS_CALL_SLOT, HS_CALL_T0 )
+            CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
+            RETURN
+         ENDIF
  
          DO I=1,8
             DO J=I,8
@@ -591,6 +605,9 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_CALL_SLOT, HS_CALL_T0 )
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

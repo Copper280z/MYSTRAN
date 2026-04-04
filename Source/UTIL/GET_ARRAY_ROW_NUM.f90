@@ -47,7 +47,8 @@
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ONE, TWO
       USE SUBR_BEGEND_LEVELS, ONLY    :  GET_ARRAY_ROW_NUM_BEGEND
- 
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
+
       USE GET_ARRAY_ROW_NUM_USE_IFs
 
       IMPLICIT NONE
@@ -68,8 +69,17 @@
       INTEGER(LONG)                   :: TMP_N             ! Real value of (DBL_HI + DBL_LO + 1.D0)/2.D0
       INTEGER(LONG)                   :: TMP_HI            ! Real value of HI
       INTEGER(LONG)                   :: TMP_LO            ! Real value of LO
+      INTEGER(LONG)                   :: HS_SLOT
+      INTEGER(LONG)                   :: HS_CALLER_SLOT
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_CALLER_T0
+      CHARACTER(LEN=128)              :: HS_NAME
 
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'GET_ARRAY_ROW_NUM', HS_SLOT, HS_T0 )
+      HS_NAME = 'GET_ARRAY_ROW_NUM/CALLER/' // TRIM(CALLING_SUBR)
+      CALL HOTSPOT_TIMER_BEGIN ( HS_NAME, HS_CALLER_SLOT, HS_CALLER_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -106,6 +116,8 @@
       !    N     = FLOOR(DBL_N)
          IF (N == LAST) THEN
             ROW_NUM = -1
+            CALL HOTSPOT_TIMER_END ( HS_CALLER_SLOT, HS_CALLER_T0 )
+            CALL HOTSPOT_TIMER_END ( HS_SLOT       , HS_T0 )
             RETURN
          ENDIF
          LAST = N  
@@ -130,6 +142,9 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_CALLER_SLOT, HS_CALLER_T0 )
+      CALL HOTSPOT_TIMER_END ( HS_SLOT       , HS_T0 )
 
       RETURN
 

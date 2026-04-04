@@ -36,7 +36,8 @@
       USE CONSTANTS_1, ONLY           :  ZERO
       USE MODEL_STUF, ONLY            :  EID, TYPE, XEB, XEL
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
- 
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
+
       USE BBMIN4_USE_IFs
 
       IMPLICIT NONE
@@ -53,6 +54,8 @@
       INTEGER(LONG), PARAMETER        :: NR        = 3     ! An input to subr BCHECK, called herein
       INTEGER(LONG), PARAMETER        :: NC        = 8     ! An input to subr BCHECK, called herein
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = BBMIN4_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
   
       REAL(DOUBLE) , INTENT(IN)       :: DPSHX(2,4)        ! Derivatives of the 4 node bilinear isopar interps wrt elem x and y
       REAL(DOUBLE) , INTENT(OUT)      :: BB(3,8)           ! Output strain-displ matrix for this elem
@@ -63,6 +66,8 @@
       REAL(DOUBLE)                    :: XL(4,3)           ! First 4 rows of XEL
 
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'HELPER/BBMIN4', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC, WRT_BUG_THIS_TIME, WRT_BUG(7), WRT_BUG(8), WRT_BUG(9)
@@ -141,6 +146,8 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

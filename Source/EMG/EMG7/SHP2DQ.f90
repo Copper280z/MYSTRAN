@@ -51,7 +51,8 @@
       USE SUBR_BEGEND_LEVELS, ONLY    :  SHP_BEGEND
       USE CONSTANTS_1, ONLY           :  ZERO, ONE, TWO, FOUR
       USE MODEL_STUF, ONLY            :  EID, EMG_IFE, ERR_SUB_NAM, NUM_EMG_FATAL_ERRS, TYPE
- 
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
+
       USE SHP2DQ_USE_IFs
 
       IMPLICIT NONE
@@ -70,6 +71,8 @@
       INTEGER(LONG)                   :: NODES_4     = 4   ! Number of nodes for one type of element
       INTEGER(LONG)                   :: NODES_8     = 8   ! Number of nodes for one type of element
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = SHP_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
   
       REAL(DOUBLE) , INTENT(IN)       :: SSI               ! Gauss point location component
       REAL(DOUBLE) , INTENT(IN)       :: SSJ               ! Gauss point location component
@@ -82,6 +85,8 @@
       REAL(DOUBLE)                    :: ET2               ! Squares of eta coords
  
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'HELPER/SHP2DQ', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC, WRT_BUG_THIS_TIME, WRT_BUG(7), WRT_BUG(8), WRT_BUG(9)
@@ -234,6 +239,8 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

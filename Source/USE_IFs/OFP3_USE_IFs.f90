@@ -31,6 +31,7 @@
       USE OFP3_ELFN_Interface
       USE OFP3_ELFE_1D_Interface
       USE OFP3_ELFE_2D_Interface
+      USE OFP3_SHELL_NO_PCOMP_Interface
       USE OFP3_STRE_PCOMP_Interface
       USE OFP3_STRE_NO_PCOMP_Interface
       USE OFP3_STRN_PCOMP_Interface

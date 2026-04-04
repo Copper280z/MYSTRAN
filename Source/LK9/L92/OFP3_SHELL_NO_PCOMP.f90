@@ -29,7 +29,7 @@
 ! Combined non-PCOMP shell output driver for force, stress, and strain output.
 ! The fast path collapses the repeated EMG traversal for the standard F06/OP2 path.
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_BUG, WRT_LOG, ERR, F04, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, ELOUT_ELFE_BIT, ELOUT_STRE_BIT, ELOUT_STRN_BIT, FATAL_ERR, IBIT,           &
                                          INT_SC_NUM, MBUG, MOGEL, NELE, NCQUAD4, NCQUAD4K, NCSHEAR, NCTRIA3, NCTRIA3K, SOL_NAME, &
@@ -174,7 +174,7 @@
             IF (PCOMP_PROPS == 'N') THEN
                IF (ETYPE(J) == ELMTYP(I)) THEN
                   IF ((ELMTYP(I)(1:5) == 'TRIA3') .OR. (ELMTYP(I)(1:5) == 'QUAD4') .OR. (ELMTYP(I)(1:5) == 'QUAD8') .OR.        &
-                      (ELMTYP(I)(1:5) == 'SHEAR') .OR. (ELMTYP(I)(1:6) == 'USERIN')) THEN
+                      (ELMTYP(I)(1:5) == 'SHEAR')) THEN
                      IF ((FORC_LOC == 'CORNER  ') .OR. (FORC_LOC == 'GAUSS   ') .OR. (ELMTYP(I)(1:5) == 'QUAD8')) THEN
                         NUM_PTS_ELFE(I) = NUM_SEi(I)
                      ELSE
@@ -215,6 +215,8 @@
          NUM_OGEL_ELFE = 0
          NUM_OGEL_STRE = 0
          NUM_OGEL_STRN = 0
+         NUM_STRE_ROWS = 0
+         NUM_STRN_ROWS = 0
 
          DO J=1,NELE
             CALL IS_ELEM_PCOMP_PROPS ( J )
@@ -251,13 +253,13 @@
                ENDIF
 
                IF (IAND(ELOUT(J,INT_SC_NUM),IBIT(ELOUT_STRE_BIT)) > 0) THEN
-                  CALL HANDLE_STRESS_ELEMENT ( J, I, NUM_OGEL_STRE, NUM_PTS_STRE, OGEL_STRE_LOC, EID_STRE_LOC, GID_STRE_LOC,     &
-                                               POLY_FIT_ERR_STRE_LOC, POLY_FIT_ERR_INDEX_STRE_LOC )
+                  CALL HANDLE_STRESS_ELEMENT ( J, I, NUM_OGEL_STRE, NUM_STRE_ROWS, NUM_PTS_STRE, OGEL_STRE_LOC, EID_STRE_LOC,    &
+                                               GID_STRE_LOC, POLY_FIT_ERR_STRE_LOC, POLY_FIT_ERR_INDEX_STRE_LOC )
                ENDIF
 
                IF (IAND(ELOUT(J,INT_SC_NUM),IBIT(ELOUT_STRN_BIT)) > 0) THEN
-                  CALL HANDLE_STRAIN_ELEMENT ( J, I, NUM_OGEL_STRN, NUM_PTS_STRN, OGEL_STRN_LOC, EID_STRN_LOC, GID_STRN_LOC,     &
-                                               POLY_FIT_ERR_STRN_LOC, POLY_FIT_ERR_INDEX_STRN_LOC )
+                  CALL HANDLE_STRAIN_ELEMENT ( J, I, NUM_OGEL_STRN, NUM_STRN_ROWS, NUM_PTS_STRN, OGEL_STRN_LOC, EID_STRN_LOC,    &
+                                               GID_STRN_LOC, POLY_FIT_ERR_STRN_LOC, POLY_FIT_ERR_INDEX_STRN_LOC )
                ENDIF
             ENDIF
          ENDDO
@@ -268,25 +270,28 @@
             OGEL(1:NUM_OGEL_ELFE,1:MOGEL) = OGEL_ELFE_LOC(1:NUM_OGEL_ELFE,1:MOGEL)
             EID_OUT_ARRAY(1:NUM_OGEL_ELFE,1:2) = EID_ELFE_LOC(1:NUM_OGEL_ELFE,1:2)
             GID_OUT_ARRAY(1:NUM_OGEL_ELFE,1:MELGP+1) = GID_ELFE_LOC(1:NUM_OGEL_ELFE,1:MELGP+1)
+            ITABLE = 0
             CALL WRITE_ELEM_ENGR_FORCE ( JVEC, NUM_OGEL_ELFE, IHDR, NUM_PTS_ELFE(I), ITABLE )
          ENDIF
 
          IF (NUM_OGEL_STRE > 0) THEN
             OGEL(1:NUM_OGEL_STRE,1:MOGEL) = OGEL_STRE_LOC(1:NUM_OGEL_STRE,1:MOGEL)
-            EID_OUT_ARRAY(1:NUM_OGEL_STRE,1:2) = EID_STRE_LOC(1:NUM_OGEL_STRE,1:2)
-            GID_OUT_ARRAY(1:NUM_OGEL_STRE,1:MELGP+1) = GID_STRE_LOC(1:NUM_OGEL_STRE,1:MELGP+1)
-            POLY_FIT_ERR(1:NUM_OGEL_STRE) = POLY_FIT_ERR_STRE_LOC(1:NUM_OGEL_STRE)
-            POLY_FIT_ERR_INDEX(1:NUM_OGEL_STRE) = POLY_FIT_ERR_INDEX_STRE_LOC(1:NUM_OGEL_STRE)
-            CALL WRITE_ELEM_STRESSES ( JVEC, NUM_OGEL_STRE, IHDR, NUM_PTS_STRE(I), ITABLE )
+            EID_OUT_ARRAY(1:NUM_STRE_ROWS,1:2) = EID_STRE_LOC(1:NUM_STRE_ROWS,1:2)
+            GID_OUT_ARRAY(1:NUM_STRE_ROWS,1:MELGP+1) = GID_STRE_LOC(1:NUM_STRE_ROWS,1:MELGP+1)
+            POLY_FIT_ERR(1:NUM_STRE_ROWS) = POLY_FIT_ERR_STRE_LOC(1:NUM_STRE_ROWS)
+            POLY_FIT_ERR_INDEX(1:NUM_STRE_ROWS) = POLY_FIT_ERR_INDEX_STRE_LOC(1:NUM_STRE_ROWS)
+            ITABLE = 0
+            CALL WRITE_ELEM_STRESSES ( JVEC, NUM_STRE_ROWS, IHDR, NUM_PTS_STRE(I), ITABLE )
          ENDIF
 
          IF (NUM_OGEL_STRN > 0) THEN
             OGEL(1:NUM_OGEL_STRN,1:MOGEL) = OGEL_STRN_LOC(1:NUM_OGEL_STRN,1:MOGEL)
-            EID_OUT_ARRAY(1:NUM_OGEL_STRN,1:2) = EID_STRN_LOC(1:NUM_OGEL_STRN,1:2)
-            GID_OUT_ARRAY(1:NUM_OGEL_STRN,1:MELGP+1) = GID_STRN_LOC(1:NUM_OGEL_STRN,1:MELGP+1)
-            POLY_FIT_ERR(1:NUM_OGEL_STRN) = POLY_FIT_ERR_STRN_LOC(1:NUM_OGEL_STRN)
-            POLY_FIT_ERR_INDEX(1:NUM_OGEL_STRN) = POLY_FIT_ERR_INDEX_STRN_LOC(1:NUM_OGEL_STRN)
-            CALL WRITE_ELEM_STRAINS ( JVEC, NUM_OGEL_STRN, IHDR, NUM_PTS_STRN(I), ITABLE )
+            EID_OUT_ARRAY(1:NUM_STRN_ROWS,1:2) = EID_STRN_LOC(1:NUM_STRN_ROWS,1:2)
+            GID_OUT_ARRAY(1:NUM_STRN_ROWS,1:MELGP+1) = GID_STRN_LOC(1:NUM_STRN_ROWS,1:MELGP+1)
+            POLY_FIT_ERR(1:NUM_STRN_ROWS) = POLY_FIT_ERR_STRN_LOC(1:NUM_STRN_ROWS)
+            POLY_FIT_ERR_INDEX(1:NUM_STRN_ROWS) = POLY_FIT_ERR_INDEX_STRN_LOC(1:NUM_STRN_ROWS)
+            ITABLE = 0
+            CALL WRITE_ELEM_STRAINS ( JVEC, NUM_STRN_ROWS, IHDR, NUM_PTS_STRN(I), ITABLE )
          ENDIF
       ENDDO
 
@@ -369,11 +374,12 @@
 
       END SUBROUTINE HANDLE_FORCE_ELEMENT
 
-      SUBROUTINE HANDLE_STRESS_ELEMENT ( J, I, NUM_OGEL, NUM_PTS, OGEL_LOC, EID_LOC, GID_LOC, POLY_LOC, POLY_IDX_LOC )
+      SUBROUTINE HANDLE_STRESS_ELEMENT ( J, I, NUM_OGEL, NUM_ROWS, NUM_PTS, OGEL_LOC, EID_LOC, GID_LOC, POLY_LOC, POLY_IDX_LOC )
 
       INTEGER(LONG), INTENT(IN)       :: J, I
       INTEGER(LONG), INTENT(IN)       :: NUM_PTS(METYPE)
       INTEGER(LONG), INTENT(INOUT)    :: NUM_OGEL
+      INTEGER(LONG), INTENT(INOUT)    :: NUM_ROWS
       REAL(DOUBLE), INTENT(INOUT)     :: OGEL_LOC(:,:)
       INTEGER(LONG), INTENT(INOUT)    :: EID_LOC(:,:)
       INTEGER(LONG), INTENT(INOUT)    :: GID_LOC(:,:)
@@ -421,31 +427,33 @@
          CALL CALC_ELEM_STRESSES ( MAXREQ, NUM_OGEL, ZERO_I, 'Y', 'N' )
          DO K=NUM_PREV+1,NUM_OGEL
             OGEL_LOC(K,:) = OGEL(K,:)
-            EID_LOC(K,1) = EID
-            EID_LOC(K,2) = ZERO_I
-            GID_LOC(K,1) = ZERO_I
-            DO R=1,ELGP
-               GID_LOC(K,R+1) = AGRID(R)
-            ENDDO
-            POLY_LOC(K) = ZERO
-            POLY_IDX_LOC(K) = ZERO_I
-            IF ((STRE_LOC == 'CORNER  ') .OR. (STRE_LOC == 'GAUSS   ')) THEN
-               IF (TYPE(1:5) == 'QUAD4') THEN
-                  POLY_LOC(K) = STRESS_OUT_PCT_ERR(M)
-                  POLY_IDX_LOC(K) = STRESS_OUT_ERR_INDEX(M)
-               ENDIF
-            ENDIF
          ENDDO
+         NUM_ROWS = NUM_ROWS + 1
+         EID_LOC(NUM_ROWS,1) = EID
+         EID_LOC(NUM_ROWS,2) = ZERO_I
+         GID_LOC(NUM_ROWS,1) = ZERO_I
+         DO R=1,ELGP
+            GID_LOC(NUM_ROWS,R+1) = AGRID(R)
+         ENDDO
+         POLY_LOC(NUM_ROWS) = ZERO
+         POLY_IDX_LOC(NUM_ROWS) = ZERO_I
+         IF ((STRE_LOC == 'CORNER  ') .OR. (STRE_LOC == 'GAUSS   ')) THEN
+            IF (TYPE(1:5) == 'QUAD4') THEN
+               POLY_LOC(NUM_ROWS) = STRESS_OUT_PCT_ERR(M)
+               POLY_IDX_LOC(NUM_ROWS) = STRESS_OUT_ERR_INDEX(M)
+            ENDIF
+         ENDIF
          NUM_PREV = NUM_OGEL
       ENDDO
 
       END SUBROUTINE HANDLE_STRESS_ELEMENT
 
-      SUBROUTINE HANDLE_STRAIN_ELEMENT ( J, I, NUM_OGEL, NUM_PTS, OGEL_LOC, EID_LOC, GID_LOC, POLY_LOC, POLY_IDX_LOC )
+      SUBROUTINE HANDLE_STRAIN_ELEMENT ( J, I, NUM_OGEL, NUM_ROWS, NUM_PTS, OGEL_LOC, EID_LOC, GID_LOC, POLY_LOC, POLY_IDX_LOC )
 
       INTEGER(LONG), INTENT(IN)       :: J, I
       INTEGER(LONG), INTENT(IN)       :: NUM_PTS(METYPE)
       INTEGER(LONG), INTENT(INOUT)    :: NUM_OGEL
+      INTEGER(LONG), INTENT(INOUT)    :: NUM_ROWS
       REAL(DOUBLE), INTENT(INOUT)     :: OGEL_LOC(:,:)
       INTEGER(LONG), INTENT(INOUT)    :: EID_LOC(:,:)
       INTEGER(LONG), INTENT(INOUT)    :: GID_LOC(:,:)
@@ -493,21 +501,22 @@
          CALL CALC_ELEM_STRAINS ( MAXREQ, NUM_OGEL, ZERO_I, 'Y', 'N' )
          DO K=NUM_PREV+1,NUM_OGEL
             OGEL_LOC(K,:) = OGEL(K,:)
-            EID_LOC(K,1) = EID
-            EID_LOC(K,2) = ZERO_I
-            GID_LOC(K,1) = ZERO_I
-            DO R=1,ELGP
-               GID_LOC(K,R+1) = AGRID(R)
-            ENDDO
-            POLY_LOC(K) = ZERO
-            POLY_IDX_LOC(K) = ZERO_I
-            IF ((STRN_LOC == 'CORNER  ') .OR. (STRN_LOC == 'GAUSS   ')) THEN
-               IF (TYPE(1:5) == 'QUAD4') THEN
-                  POLY_LOC(K) = STRAIN_OUT_PCT_ERR(M)
-                  POLY_IDX_LOC(K) = STRAIN_OUT_ERR_INDEX(M)
-               ENDIF
-            ENDIF
          ENDDO
+         NUM_ROWS = NUM_ROWS + 1
+         EID_LOC(NUM_ROWS,1) = EID
+         EID_LOC(NUM_ROWS,2) = ZERO_I
+         GID_LOC(NUM_ROWS,1) = ZERO_I
+         DO R=1,ELGP
+            GID_LOC(NUM_ROWS,R+1) = AGRID(R)
+         ENDDO
+         POLY_LOC(NUM_ROWS) = ZERO
+         POLY_IDX_LOC(NUM_ROWS) = ZERO_I
+         IF ((STRN_LOC == 'CORNER  ') .OR. (STRN_LOC == 'GAUSS   ')) THEN
+            IF (TYPE(1:5) == 'QUAD4') THEN
+               POLY_LOC(NUM_ROWS) = STRAIN_OUT_PCT_ERR(M)
+               POLY_IDX_LOC(NUM_ROWS) = STRAIN_OUT_ERR_INDEX(M)
+            ENDIF
+         ENDIF
          NUM_PREV = NUM_OGEL
       ENDDO
 

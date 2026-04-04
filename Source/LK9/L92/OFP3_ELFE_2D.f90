@@ -29,7 +29,7 @@
 ! Processes element engr force output requests for 2D (TRIA3, QUAD4, SHEAR) elements for one subcase. Results go into array OGEL
 ! for later output in LINK9
  
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  WRT_BUG, WRT_LOG, ERR, F04, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, ELOUT_ELFE_BIT, FATAL_ERR, IBIT, INT_SC_NUM, MBUG, MOGEL,                   &
                                          WARN_ERR, NELE, NCQUAD4, NCQUAD4K, NCSHEAR, NCTRIA3, NCTRIA3K, SOL_NAME, MAX_STRESS_POINTS
@@ -44,6 +44,7 @@
       USE CC_OUTPUT_DESCRIBERS, ONLY  :  FORC_LOC
       USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL
       USE OUTPUT4_MATRICES, ONLY      :  OTM_ELFE, TXT_ELFE
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
   
       USE PLANE_COORD_TRANS_21_Interface
       USE TRANSFORM_SHELL_STR_Interface
@@ -78,6 +79,8 @@
       integer(long)                   :: num_pcomp_elems   ! number of elements that are composites (used to prevent output of engr
 !                                                            forces for PCOMP elems until I fix that output)
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = OFP3_ELFE_2D_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
                                                            ! Stress index (1 through 9) where poly fit err is max
       INTEGER(LONG)                   :: STRESS_OUT_ERR_INDEX(MAX_STRESS_POINTS)
 
@@ -101,6 +104,8 @@
       INTRINSIC IAND
   
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'OFP3_ELFE_2D', HS_SLOT, HS_T0 )
+
 !     Initialize
       TABLE_NAME = "OEF ERR "
       ITABLE = 0
@@ -149,6 +154,7 @@
                      NUM_PTS(I) = 1
                      ELOUT_ELFE = IAND(ELOUT(J,INT_SC_NUM),IBIT(ELOUT_ELFE_BIT))
                      IF (ELOUT_ELFE > 0) THEN
+                        CALL HOTSPOT_COUNTER_ADD ( 'LINK9_REQUEST/ELEMENTS/ELFE', INT(1,DBL_LONG) )
                         NELREQ(I) = NELREQ(I) + NUM_PTS(I)
                      ENDIF
                   else
@@ -492,6 +498,8 @@ elems_3: DO J = 1,NELE
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

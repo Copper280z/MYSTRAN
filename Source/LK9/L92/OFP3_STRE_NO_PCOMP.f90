@@ -29,7 +29,7 @@
 ! Processes element stress output requests for non PCOMP elements for one subcase. Also write Output Transformation Matrices (OTM's)
 ! for stresses for Craig-Bampton models)
  
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  WRT_BUG, WRT_LOG, ERR, F04, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, ELOUT_STRE_BIT, FATAL_ERR, IBIT, INT_SC_NUM,                                &
                                          MAX_STRESS_POINTS, MBUG, MOGEL,                                                           &
@@ -46,6 +46,7 @@
       USE CC_OUTPUT_DESCRIBERS, ONLY  :  STRE_LOC, STRE_OPT
       USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX
       USE OUTPUT4_MATRICES, ONLY      :  OTM_STRE, TXT_STRE
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
 
       USE PLANE_COORD_TRANS_21_Interface
       USE TRANSFORM_SHELL_STR_Interface
@@ -85,6 +86,8 @@
       INTEGER(LONG)                   :: STRESS_OUT_ERR_INDEX(MAX_STRESS_POINTS)
 
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = OFP3_STRE_NO_PCOMP_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
 
                                                            ! Array of %errs from subr POLYNOM_FIT_STRE_STRN (only NUM_PTS vals used)
       REAL(DOUBLE)                    :: STRESS_OUT_PCT_ERR(MAX_STRESS_POINTS)
@@ -108,6 +111,7 @@
       TABLE_NAME = "OES ERR "
 ! **********************************************************************************************************************************
       !NEW_RESULT = .TRUE.
+      CALL HOTSPOT_TIMER_BEGIN ( 'OFP3_STRE_NO_PCOMP', HS_SLOT, HS_T0 )
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -149,6 +153,7 @@
                   ENDIF
                   ELOUT_STRE = IAND(ELOUT(J,INT_SC_NUM),IBIT(ELOUT_STRE_BIT))
                   IF (ELOUT_STRE > 0) THEN
+                     CALL HOTSPOT_COUNTER_ADD ( 'LINK9_REQUEST/ELEMENTS/STRE', INT(1,DBL_LONG) )
                      NELREQ(I) = NELREQ(I) + NUM_PTS(I)
                   ENDIF
                ENDIF
@@ -903,6 +908,8 @@ do_stress_pts:    DO M=1,NUM_PTS(I)
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

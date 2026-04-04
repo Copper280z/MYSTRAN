@@ -44,7 +44,6 @@
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'WRITE_DOF_TABLES'
       CHARACTER(LEN=DATA_NAM_LEN)     :: DATA_SET_NAME      ! A data set name for output purposes
 
-      INTEGER(LONG)                   :: I,J               ! DO loop indices or counters
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = WRITE_DOF_TABLES_BEGEND
       INTEGER(LONG)                   :: OUNT(2)           ! File units to write messages to. Input to subr UNFORMATTED_OPEN
       INTEGER(LONG)                   :: HS_SLOT
@@ -72,29 +71,17 @@
       DATA_SET_NAME = 'TSET'
       WRITE(L1C) DATA_SET_NAME
       WRITE(L1C) NGRID
-      DO I = 1,NGRID
-         DO J = 1,6
-           WRITE(L1C) TSET(I,J)
-         ENDDO
-      ENDDO
+      WRITE(L1C) TSET
       DATA_SET_NAME = 'TDOFI'
       WRITE(L1C) DATA_SET_NAME
       WRITE(L1C) NDOFG
       WRITE(L1C) MTDOF
-      DO I = 1,NDOFG
-         DO J = 1,MTDOF
-            WRITE(L1C) TDOFI(I,J)
-         ENDDO
-      ENDDO
+      WRITE(L1C) TDOFI
       DATA_SET_NAME = 'TDOF'
       WRITE(L1C) DATA_SET_NAME
       WRITE(L1C) NDOFG
       WRITE(L1C) MTDOF
-      DO I = 1,NDOFG
-         DO J = 1,MTDOF
-            WRITE(L1C) TDOF(I,J)
-         ENDDO
-      ENDDO
+      WRITE(L1C) TDOF
 
 ! **********************************************************************************************************************************
       IF (WRT_LOG >= SUBR_BEGEND) THEN

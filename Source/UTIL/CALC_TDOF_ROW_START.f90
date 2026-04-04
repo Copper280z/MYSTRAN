@@ -34,7 +34,7 @@
       USE TIMDAT, ONLY                :  TSEC
       USE DOF_TABLES, ONLY            :  TDOF_ROW_START
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
-      USE MODEL_STUF, ONLY            :  GRID_ID
+      USE MODEL_STUF, ONLY            :  GRID, GRID_ID
       USE SUBR_BEGEND_LEVELS, ONLY    :  CALC_TDOF_ROW_START_BEGEND
 
       USE CALC_TDOF_ROW_START_USE_IFs
@@ -62,12 +62,13 @@
 
       TDOF_ROW_START(1) = 1
       DO I=2,NGRID
-         CALL GET_GRID_NUM_COMPS ( GRID_ID(I-1), NUM_COMPS, SUBR_NAME )
+         NUM_COMPS = GRID(I-1,6)
          TDOF_ROW_START(I) = TDOF_ROW_START(I-1) + NUM_COMPS
       ENDDO
 
       IF ((DEBUG(183) > 0) .AND. (PRTDEB == 'Y')) THEN
          DO I=1,NGRID
+            NUM_COMPS = GRID(I,6)
             WRITE(F06,88678) I, GRID_ID(I), NUM_COMPS, TDOF_ROW_START(I)
          ENDDO
       ENDIF

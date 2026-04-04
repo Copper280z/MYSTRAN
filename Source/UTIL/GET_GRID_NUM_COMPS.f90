@@ -33,7 +33,7 @@
       USE IOUNT1, ONLY                :  WRT_LOG, ERR, F04, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, NGRID
       USE TIMDAT, ONLY                :  TSEC
-      USE MODEL_STUF, ONLY            :  GRID
+      USE MODEL_STUF, ONLY            :  GRID, GRID_ID
       USE SUBR_BEGEND_LEVELS, ONLY    :  GET_GRID_NUM_COMPS_BEGEND
 
       USE GET_GRID_NUM_COMPS_USE_IFs
@@ -45,7 +45,9 @@
 
       INTEGER(LONG), INTENT(IN)       :: GRID_NUM          ! A grid number (calling subr checked that it is an actual grid)
       INTEGER(LONG), INTENT(OUT)      :: NUM_COMPS         ! 6 if GRID_NUM is an physical grid, 1 if an SPOINT
-      INTEGER(LONG)                   :: I                 ! DO loop index
+      INTEGER(LONG)                   :: HI                ! Upper bound in binary search
+      INTEGER(LONG)                   :: LO                ! Lower bound in binary search
+      INTEGER(LONG)                   :: MID               ! Midpoint in binary search
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = GET_GRID_NUM_COMPS_BEGEND
 
 ! **********************************************************************************************************************************
@@ -62,10 +64,18 @@
 
 ! Calc NUM_COMPS
 
-      DO I=1,NGRID
-         IF (GRID(I,1) == GRID_NUM) THEN
-            NUM_COMPS = GRID(I,6)
+      LO = 1
+      HI = NGRID
+
+      DO WHILE (LO <= HI)
+         MID = LO + (HI - LO)/2
+         IF (GRID_ID(MID) == GRID_NUM) THEN
+            NUM_COMPS = GRID(MID,6)
             EXIT
+         ELSE IF (GRID_ID(MID) < GRID_NUM) THEN
+            LO = MID + 1
+         ELSE
+            HI = MID - 1
          ENDIF
       ENDDO
 

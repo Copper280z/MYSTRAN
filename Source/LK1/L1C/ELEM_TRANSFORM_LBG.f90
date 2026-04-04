@@ -35,11 +35,11 @@
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  WRT_ERR, WRT_LOG, ERR, F04, F06
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MELDOF, NCORD, NGRID, NSUB, NTSUB
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MELDOF, NCORD, NSUB, NTSUB
       USE TIMDAT, ONLY                :  TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  ELEM_TRANSFORM_LBG_BEGEND
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
-      USE MODEL_STUF, ONLY            :  AGRID, CORD, ELDOF, GRID, GRID_ID, KEG, TE_IDENT, TYPE
+      USE MODEL_STUF, ONLY            :  AGRID, BGRID, CORD, ELDOF, GRID, KEG, TE_IDENT, TYPE
       USE MODEL_STUF, ONLY            :  ELGP
       USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
 
@@ -55,8 +55,8 @@
       INTEGER(LONG)                   :: ACIDK             ! Actual global coord sys ID for elem grid GRID_ID_ROW_NUM_K
       INTEGER(LONG)                   :: BEG_ROW_GET       ! An input to subr MATGET/MATPUT (what row to start get/put rows)
       INTEGER(LONG)                   :: BEG_COL_GET       ! An input to subr MATGET/MATPUT (what col to start get/put rows)
-      INTEGER(LONG)                   :: GRID_ID_ROW_NUM_J ! Row number in array GRID_ID where AGRID(J) is found
-      INTEGER(LONG)                   :: GRID_ID_ROW_NUM_K ! Row number in array GRID_ID where AGRID(K) is found
+      INTEGER(LONG)                   :: GRID_ROW_NUM_J    ! Internal row number for AGRID(J)
+      INTEGER(LONG)                   :: GRID_ROW_NUM_K    ! Internal row number for AGRID(K)
       INTEGER(LONG)                   :: I,J,K,L,M         ! DO loop indices
       INTEGER(LONG)                   :: ICID              ! Internal coord sys ID
       INTEGER(LONG), PARAMETER        :: NCOLA     = 3     ! An input to subr MATMULT_FFF/MATMULT_FFF_T, called herein
@@ -144,8 +144,8 @@ ke_me:IF ((WHICH == 'KE') .OR. (WHICH == 'KED') .OR. (WHICH == 'ME')) THEN
 j_do1:   DO J=1,ELGP
             CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/TOTAL', INT(1,DBL_LONG) )
             CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/ELEM_TRANSFORM_LBG', INT(1,DBL_LONG) )
-            CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(J), GRID_ID_ROW_NUM_J )
-            ACIDJ = GRID(GRID_ID_ROW_NUM_J,3)
+            GRID_ROW_NUM_J = BGRID(J)
+            ACIDJ = GRID(GRID_ROW_NUM_J,3)
             IF (ACIDJ /= 0) THEN
 k_cord1:       DO K=1,NCORD
                   IF (ACIDJ == CORD(K,2)) THEN
@@ -153,7 +153,7 @@ k_cord1:       DO K=1,NCORD
                      EXIT k_cord1
                   ENDIF
                ENDDO k_cord1
-               CALL GEN_T0L ( GRID_ID_ROW_NUM_J, ICID, THETAD, PHID, TJ )
+               CALL GEN_T0L ( GRID_ROW_NUM_J, ICID, THETAD, PHID, TJ )
             ELSE
                DO K=1,3
                   DO L=1,3
@@ -175,8 +175,8 @@ k_do1:      DO K=J,ELGP
                ELSE 
                   CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/TOTAL', INT(1,DBL_LONG) )
                   CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/ELEM_TRANSFORM_LBG', INT(1,DBL_LONG) )
-                  CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(K), GRID_ID_ROW_NUM_K )
-                  ACIDK = GRID(GRID_ID_ROW_NUM_K,3)
+                  GRID_ROW_NUM_K = BGRID(K)
+                  ACIDK = GRID(GRID_ROW_NUM_K,3)
                   IF (ACIDK /= 0) THEN
 l_cord1:             DO L=1,NCORD
                      IF (ACIDK == CORD(L,2)) THEN
@@ -184,7 +184,7 @@ l_cord1:             DO L=1,NCORD
                            EXIT l_cord1
                         ENDIF
                      ENDDO l_cord1
-                     CALL GEN_T0L ( GRID_ID_ROW_NUM_K, ICID, THETAD, PHID, TK )
+                     CALL GEN_T0L ( GRID_ROW_NUM_K, ICID, THETAD, PHID, TK )
                   ELSE
                      DO L=1,3
                         DO M=1,3
@@ -239,8 +239,8 @@ j_do2:   DO J=1,ELGP
 
             BEG_ROW_GET = 6*(J-1) + 1
             BEG_COL_GET = 1
-            CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(J), GRID_ID_ROW_NUM_J )
-            ACIDJ = GRID(GRID_ID_ROW_NUM_J,3)
+            GRID_ROW_NUM_J = BGRID(J)
+            ACIDJ = GRID(GRID_ROW_NUM_J,3)
             IF (ACIDJ /= 0) THEN
 k_cord2:       DO K=1,NCORD
                   IF (ACIDJ == CORD(K,2)) THEN
@@ -248,7 +248,7 @@ k_cord2:       DO K=1,NCORD
                      EXIT k_cord2
                   ENDIF
                ENDDO k_cord2
-               CALL GEN_T0L ( GRID_ID_ROW_NUM_J, ICID, THETAD, PHID, TJ )
+               CALL GEN_T0L ( GRID_ROW_NUM_J, ICID, THETAD, PHID, TJ )
                DO K=1,2
                   CALL MATGET ( QE   , MELDOF, NCOL_IN, BEG_ROW_GET, BEG_COL_GET, NROW_GET, NCOL_GET, DUM21 )
                   CALL MATMULT_FFF_T ( TJ, DUM21, 3    , 3    , NCOLB, DUM22 )

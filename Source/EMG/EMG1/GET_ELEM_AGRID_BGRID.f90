@@ -48,7 +48,6 @@
       INTEGER(LONG)                   :: IERR        = 0   ! Local error count for BGRID not defined
       INTEGER(LONG)                   :: EPNTK             ! Value from array EPNT at the row for this internal elem ID. It is the
 !                                                            row number in array EDAT where data begins for this element. 
-      INTEGER(LONG)                   :: GRID_ID_ROW_NUM   ! Row num in GRID_ID where AGRID(I) exists
       INTEGER(LONG)                   :: I                 ! DO loop index
       INTEGER(LONG)                   :: DELTA             ! Offset in EDAT (from 1st record for an elem) where grid no's begin
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = GET_ELEM_AGRID_BGRID_BEGEND
@@ -117,9 +116,8 @@
             DO I=1,ELGP
                CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/TOTAL'                        , INT(1,DBL_LONG) )
                CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/GET_ELEM_AGRID_BGRID_CHECK'   , INT(1,DBL_LONG) )
-               CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(I), GRID_ID_ROW_NUM )
-               IF (GRID_ID_ROW_NUM > 0) THEN
-                  IF (GRID(GRID_ID_ROW_NUM,6) /= 6) THEN
+               IF (BGRID(I) > 0) THEN
+                  IF (GRID(BGRID(I),6) /= 6) THEN
                      IERR = IERR + 1
                      FATAL_ERR = FATAL_ERR + 1
                      WRITE(ERR,1951) TYPE, EID, AGRID(I)

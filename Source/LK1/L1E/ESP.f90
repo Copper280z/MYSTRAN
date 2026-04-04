@@ -49,7 +49,7 @@
       USE SUBR_BEGEND_LEVELS, ONLY    :  ESP_BEGEND
       USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
-      USE MODEL_STUF, ONLY            :  AGRID, ELDT, ELDOF, ELGP, GRID_ID, NUM_EMG_FATAL_ERRS, PLY_NUM, OELDT, KE, KED, TYPE
+      USE MODEL_STUF, ONLY            :  BGRID, ELDT, ELDOF, ELGP, GRID, NUM_EMG_FATAL_ERRS, PLY_NUM, OELDT, KE, KED, TYPE
       USE STF_ARRAYS, ONLY            :  STFKEY, STF3
       USE STF_TEMPLATE_ARRAYS, ONLY   :  CROW, TEMPLATE
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
@@ -139,6 +139,8 @@
       ELSE
          LTERM = LTERM_KGG
       ENDIF
+
+      CALL TDOF_COL_NUM ( 'G ', G_SET_COL_NUM )
 
 
 ! DEBUG(10) = 13 or 33 requests that array TEMPLATE be printed
@@ -244,11 +246,10 @@
          DO J = 1,ELGP
             CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/TOTAL', INT(1,DBL_LONG) )
             CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/ESP'  , INT(1,DBL_LONG) )
-            CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(J), IGRID )
+            IGRID = BGRID(J)
             ROW_NUM_START = TDOF_ROW_START(IGRID)
-            CALL GET_GRID_NUM_COMPS ( AGRID(J), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID(IGRID,6)
             DO K = 1,NUM_COMPS
-               CALL TDOF_COL_NUM ( 'G ',  G_SET_COL_NUM )
                TDOF_ROW_NUM       = ROW_NUM_START + K - 1
                EDOF_ROW_NUM       = EDOF_ROW_NUM + 1
                EDOF(EDOF_ROW_NUM) = TDOF(TDOF_ROW_NUM, G_SET_COL_NUM)
@@ -733,7 +734,7 @@ stfpnt0:          DO                                       ! so, run this loop u
          WRITE(F06,97533)
          KK=0
          DO LL=1,ELGP
-            CALL GET_GRID_NUM_COMPS ( AGRID(LL), NUM_COMPS, SUBR_NAME )
+            NUM_COMPS = GRID(BGRID(LL),6)
             DO MM=1,NUM_COMPS
                KK = KK + 1
                RATIO = ZERO

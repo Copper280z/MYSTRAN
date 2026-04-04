@@ -43,7 +43,6 @@
       CHARACTER(LEN=DATA_NAM_LEN)     :: NAME_Is           ! Name of data actually read from file
       CHARACTER(LEN=DATA_NAM_LEN)     :: NAME_ShouldBe     ! Name of data that should be read from file
 
-      INTEGER(LONG)                   :: I,J               ! DO loop indices or counters
       INTEGER(LONG)                   :: INT2              ! Integer value read from file
       INTEGER(LONG)                   :: IOCHK             ! IOSTAT error number when opening or reading a file
       INTEGER(LONG)                   :: OUNT(2)           ! File units to write messages to. Input to subr UNFORMATTED_OPEN  
@@ -80,12 +79,8 @@
       CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
       IF (INT2 /= NGRID) CALL DATA_SET_SIZE_ERROR ( LINK1C, NAME_Is, 'NGRID', NGRID, INT2 )
 
-      DO I=1,NGRID
-         DO J=1,6
-            READ(L1C,IOSTAT=IOCHK) TSET(I,J)                                   ; REC_NO = REC_NO + 1
-            CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
-         ENDDO 
-      ENDDO 
+      READ(L1C,IOSTAT=IOCHK) TSET                                             ; REC_NO = REC_NO + 1
+      CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
 
 ! Read TDOFI array
 
@@ -104,12 +99,8 @@
       CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
       IF (INT2 /= MTDOF  ) CALL DATA_SET_SIZE_ERROR ( LINK1C, NAME_Is, 'MTDOF', MTDOF, INT2 )
 
-      DO I=1,NDOFG
-         DO J=1,MTDOF
-            READ(L1C,IOSTAT=IOCHK) TDOFI(I,J)                                  ; REC_NO = REC_NO + 1
-            CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
-         ENDDO 
-      ENDDO 
+      READ(L1C,IOSTAT=IOCHK) TDOFI                                            ; REC_NO = REC_NO + 1
+      CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
 
 ! Read TDOF array
 
@@ -128,12 +119,8 @@
       CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
       IF (INT2 /= MTDOF  ) CALL DATA_SET_SIZE_ERROR ( LINK1C, NAME_Is, 'MTDOF', MTDOF, INT2 )
 
-      DO I=1,NDOFG
-         DO J=1,MTDOF
-            READ(L1C,IOSTAT=IOCHK) TDOF(I,J)                                   ; REC_NO = REC_NO + 1
-            CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
-         ENDDO 
-      ENDDO 
+      READ(L1C,IOSTAT=IOCHK) TDOF                                             ; REC_NO = REC_NO + 1
+      CALL READ_CHK ( IOCHK, LINK1C, NAME_ShouldBe, REC_NO, OUNT )
 
       CALL FILE_CLOSE ( L1C, LINK1C, 'KEEP', 'Y' )
 

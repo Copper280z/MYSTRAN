@@ -36,7 +36,7 @@
 ! stiffness, STF, array. See explanation, with an example, in module STF_ARRAYS
 
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  ERR, F04, F06, F23, F23FIL, F23_MSG, F24, F24FIL, F24_MSG, FILE_NAM_MAXLEN, SC1, SCR,     &
                                          WRT_BUG, WRT_ERR, WRT_LOG
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, ELDT_BUG_KE_BIT, ELDT_BUG_SE_BIT,                                           &
@@ -53,6 +53,8 @@
       USE STF_ARRAYS, ONLY            :  STFKEY, STF3
       USE STF_TEMPLATE_ARRAYS, ONLY   :  CROW, TEMPLATE
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN,                           &
+                                         HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
  
       USE ESP_USE_IFs
 
@@ -92,15 +94,20 @@
                                                            ! Indicator for output of elem data to BUG file
       INTEGER(LONG)                   :: LTERM             ! Either LTERM_KGGD (BUCKLING) or LTERM_KGG otherwise
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = ESP_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
 
       REAL(DOUBLE)                    :: DQE(MELDOF,NSUB)  ! Dummy array in call to ELEM_TRANSFORM_LBG
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_PHASE_T0
  
       INTRINSIC                       :: DABS
       INTRINSIC                       :: IAND
       INTRINSIC                       :: MAX
 
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'ESP', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -214,7 +221,9 @@
          ENDIF
  
          PLY_NUM = 0
+         HS_PHASE_T0 = HOTSPOT_WALL_TIME()
          CALL EMG ( I   , OPT, 'Y', SUBR_NAME, 'Y' )       ! 'N' means do not write to BUG file
+         CALL HOTSPOT_TIMER_ADD ( 'ESP/EMG', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
 
          IF (NUM_EMG_FATAL_ERRS /=0) THEN
             IERROR = IERROR + NUM_EMG_FATAL_ERRS
@@ -233,6 +242,8 @@
 
          EDOF_ROW_NUM = 0                                  ! Generate element DOF'S
          DO J = 1,ELGP
+            CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/TOTAL', INT(1,DBL_LONG) )
+            CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/ESP'  , INT(1,DBL_LONG) )
             CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(J), IGRID )
             ROW_NUM_START = TDOF_ROW_START(IGRID)
             CALL GET_GRID_NUM_COMPS ( AGRID(J), NUM_COMPS, SUBR_NAME )
@@ -253,11 +264,13 @@
 ! Transform KE from local at the elem ends to basic at elem ends to global at elem ends to global at grids.
                                                            ! Transform PTE from local-basic-global
          IF ((TYPE(1:4) /= 'ELAS') .AND. (TYPE /= 'USERIN  ')) THEN
+            HS_PHASE_T0 = HOTSPOT_WALL_TIME()
             IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
                CALL ELEM_TRANSFORM_LBG ( 'KED', KED, DQE )
             ELSE
                CALL ELEM_TRANSFORM_LBG ( 'KE' , KE , DQE )
             ENDIF
+            CALL HOTSPOT_TIMER_ADD ( 'ESP/ELEM_TRANSFORM_LBG', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
          ENDIF 
 
 ! Write diagonostics on negative diag stiffness after  transformation to global
@@ -268,6 +281,7 @@
 
 ! Put the elem stiff matrix, KE, or KED (now in global coords), into STF array. J ranges over rows, K over cols of elem stiff mat 
  
+         HS_PHASE_T0 = HOTSPOT_WALL_TIME()
 kgg_rows:DO J = 1,ELDOF
             KGG_ROWJ  = EDOF(J)
             IF ((DEBUG(10) == 12) .OR. (DEBUG(10) == 13) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
@@ -346,6 +360,7 @@ stfpnt0:          DO                                       ! so, run this loop u
                                                            ! If not, then this loop runs until it finds STFPNT=0, and inserts term.
  
                      IF (KGG_COL == STF3(IS)%Col_1) THEN   ! There is a term that exists with same DOF'S as stiff(J,K) so add terms 
+                        CALL HOTSPOT_COUNTER_ADD ( 'KGG_DUPLICATE_INSERTS', INT(1,DBL_LONG) )
 
                         IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
                            STF3(IS)%Col_3 = STF3(IS)%Col_3 + KED(J,K)
@@ -418,6 +433,7 @@ stfpnt0:          DO                                       ! so, run this loop u
             ENDDO kgg_cols 
 
          ENDDO kgg_rows 
+         CALL HOTSPOT_TIMER_ADD ( 'ESP/STIFF_INSERT', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
          CALL COUNTER_PROGRESS(I)
       ENDDO elems 
       WRITE(SC1,*) CR13
@@ -556,8 +572,10 @@ stfpnt0:          DO                                       ! so, run this loop u
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9002) SUBR_NAME,TSEC
- 9002    FORMAT(1X,A,' END  ',F10.3)
+9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

@@ -49,6 +49,7 @@
       USE SUBR_BEGEND_LEVELS, ONLY    :  ELMDAT_BEGEND
       USE CONSTANTS_1, ONLY           :  ZERO, ONEPM4, ONE, TWO
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD
       USE MODEL_STUF, ONLY            :  AGRID, BAROFF, BUSH_CID, BUSH_OCID, BUSH_VVEC, BUSH_VVEC_OR_CID, BUSHOFF, BGRID,          &
                                          CAN_ELEM_TYPE_OFFSET, CORD, DOFPIN, EDAT, EID, ELAS_COMP, ELDOF, ELEM_LEN_12, ELGP,       &
                                          ELMTYP, EMAT, EOFF, NUM_EMG_FATAL_ERRS, EPROP, EPNT, ETYPE, GRID, RGRID, GRID_ID,         &
@@ -238,6 +239,8 @@
 
             IF (VVEC_FLAG > 0) THEN                        ! V vector is defined by a grid point
 
+               CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REQUIRED/TOTAL'        , 1_8 )
+               CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REQUIRED/ELMDAT1/VVEC' , 1_8 )
                CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, VVEC_FLAG, IGID_V )
                IF (IGID_V == -1) THEN
                   WRITE(ERR,1900) AGRID(I),EID,TYPE

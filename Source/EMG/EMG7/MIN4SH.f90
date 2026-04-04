@@ -35,7 +35,8 @@
       USE TIMDAT, ONLY                :  TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  MIN4SH_BEGEND
       USE CONSTANTS_1, ONLY           :  ZERO, ONE, TWO, EIGHT
-  
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
+
       USE MIN4SH_USE_IFs
 
       IMPLICIT NONE
@@ -46,6 +47,8 @@
 
       INTEGER(LONG)                   :: I,J               ! DO loop indices
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = MIN4SH_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
   
       REAL(DOUBLE) , INTENT(IN)       :: SSI               ! Gauss point coordinate
       REAL(DOUBLE) , INTENT(IN)       :: SSJ               ! Gauss point coordinate
@@ -75,6 +78,8 @@
       REAL(DOUBLE)                    :: Y2M               ! Intermediate variable used in calculating outputs
   
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'HELPER/MIN4SH', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC, WRT_BUG_THIS_TIME, WRT_BUG(7), WRT_BUG(8), WRT_BUG(9)
@@ -225,6 +230,8 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

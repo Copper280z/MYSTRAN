@@ -32,7 +32,7 @@
 ! above the diagonal. Integer arrays EMSKEY, EMSPNT and EMSCOL are generated to form a linked list for the mass terms. 
  
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  ERR, F04, F06, F22, F22FIL, F22_MSG, SC1, WRT_BUG, WRT_ERR, WRT_LOG
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, ELDT_BUG_ME_BIT, ELDT_F22_ME_BIT, FATAL_ERR, IBIT, LINKNO, LTERM_MGGE,   &
                                          MBUG, MELDOF, NDOFG, NELE, NGRID, NTERM_MGGE, NSUB
@@ -44,6 +44,8 @@
       USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
       USE MODEL_STUF, ONLY            :  AGRID, ELDT, ELDOF, ELGP, GRID_ID, NUM_EMG_FATAL_ERRS, ME, OELDT, PLY_NUM, TYPE
       USE EMS_ARRAYS, ONLY            :  EMS, EMSCOL, EMSKEY, EMSPNT
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN,                           &
+                                         HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
  
       USE EMP_USE_IFs
 
@@ -75,13 +77,19 @@
       INTEGER(LONG)                   :: TDOF_ROW_NUM      ! Row number in array TDOF
                                                            ! Indicator for output of elem data to BUG file
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = EMP_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
  
       REAL(DOUBLE)                    :: DQE(MELDOF,NSUB)  ! Dummy array in call to ELEM_TRANSFORM_LBG
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_PHASE_T0
+      CHARACTER(LEN=128)              :: HS_PHASE_NAME
  
       INTRINSIC                       :: DABS, IAND
 
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'EMP', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -143,7 +151,10 @@
 
          NUM_EMG_FATAL_ERRS = 0
          PLY_NUM = 0
+         HS_PHASE_T0 = HOTSPOT_WALL_TIME()
          CALL EMG ( I   , OPT, 'N', SUBR_NAME, 'Y' )       ! 'Y' means write to BUG file
+         HS_PHASE_NAME = 'EMP/EMG/' // TRIM(TYPE)
+         CALL HOTSPOT_TIMER_ADD ( HS_PHASE_NAME, HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
          IF (NUM_EMG_FATAL_ERRS /=0) THEN
             IERROR = IERROR + NUM_EMG_FATAL_ERRS
             CYCLE elems
@@ -157,6 +168,8 @@
          EDOF_ROW_NUM = 0                                  ! Generate element DOF'S
          DO J = 1,ELGP
 !           CALL CALC_TDOF_ROW_NUM ( AGRID(J), ROW_NUM_START, 'N' )
+            CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/TOTAL', INT(1,DBL_LONG) )
+            CALL HOTSPOT_COUNTER_ADD ( 'GRID_LOOKUP/REPLACEABLE/EMP'  , INT(1,DBL_LONG) )
             CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, AGRID(J), IGRID )
             ROW_NUM_START = TDOF_ROW_START(IGRID)
             CALL GET_GRID_NUM_COMPS ( AGRID(J), NUM_COMPS, SUBR_NAME )
@@ -173,13 +186,16 @@
                                                            ! Transform PTE from local-basic-global
          IF ((TYPE(1:4) /= 'ELAS') .AND. (TYPE /= 'USERIN  '))THEN
 
+            HS_PHASE_T0 = HOTSPOT_WALL_TIME()
             CALL ELEM_TRANSFORM_LBG ( 'ME', ME, DQE )
+            CALL HOTSPOT_TIMER_ADD ( 'EMP/ELEM_TRANSFORM_LBG', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
 24357 format(6(1es14.6))
 
          ENDIF 
 
 ! Put the element mass matrix, ME, into EMS array. J ranges over rows, K over cols of elem mass matrix, ME 
  
+         HS_PHASE_T0 = HOTSPOT_WALL_TIME()
 mgg_rows:DO J = 1,ELDOF
             MGG_ROWJ  = EDOF(J)
             IF ((DEBUG(10) == 22) .OR. (DEBUG(10) == 23) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
@@ -211,6 +227,11 @@ mgg_cols:   DO K = KSTART,ELDOF
                IF (IS == 0) THEN                           ! EMSKEY(MGG_ROW)=0 means no current terms in global mass matrix at row
                                                            ! MGG_ROW update NTERM_MGGE and reset EMSKEY, EMSCOL, EMSPNT, EMS arrays
                   NTERM_MGGE = NTERM_MGGE + 1
+                  IF (TYPE == 'QUAD4   ') THEN
+                     CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/CQUAD4', INT(1,DBL_LONG) )
+                  ELSE
+                     CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/OTHER' , INT(1,DBL_LONG) )
+                  ENDIF
 
                   IF (NTERM_MGGE > LTERM_MGGE) THEN
                      WRITE(ERR,1624) SUBR_NAME, 'MASS    ', 'LTERM_MGGE', LTERM_MGGE
@@ -234,6 +255,7 @@ emspnt0:          DO                                       ! so, run this loop u
                                                            ! If not, then this loop runs until it finds EMSPNT=0, and insetrs term.
  
                      IF (MGG_COL == EMSCOL(IS)) THEN       ! There is a term that exists with same DOF'S as ME(J,K) so add terms 
+                        CALL HOTSPOT_COUNTER_ADD ( 'MGGE_DUPLICATE_INSERTS', INT(1,DBL_LONG) )
 
                         EMS(IS) = EMS(IS) + ME(J,K)
                         IF ((DEBUG(10) == 22) .OR. (DEBUG(10) == 23) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
@@ -253,6 +275,11 @@ emspnt0:          DO                                       ! so, run this loop u
                               CALL OUTA_HERE ( 'Y' )       ! MYSTRAN limitation, so quit
                            ENDIF
                            NTERM_MGGE        = NTERM_MGGE+1! Increment NTERM_MGGE
+                           IF (TYPE == 'QUAD4   ') THEN
+                              CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/CQUAD4', INT(1,DBL_LONG) )
+                           ELSE
+                              CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/OTHER' , INT(1,DBL_LONG) )
+                           ENDIF
                            EMSPNT(ISS)       = NTERM_MGGE  ! EMSPNT for the current ME(J,K) term
                            EMSPNT(NTERM_MGGE) = 0          ! Latest EMSPNT is set to 0 so we will know when to insert next ME(J,K) 
                            EMSCOL(NTERM_MGGE) = MGG_COL    ! EMSCOL always is MGG_COL
@@ -271,10 +298,11 @@ emspnt0:          DO                                       ! so, run this loop u
                   ENDDO emspnt0 
  
                ENDIF
- 
+
             ENDDO mgg_cols 
 
          ENDDO mgg_rows 
+         CALL HOTSPOT_TIMER_ADD ( 'EMP/MASS_INSERT', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
          CALL COUNTER_PROGRESS(I)
 
       ENDDO elems 
@@ -321,8 +349,10 @@ emspnt0:          DO                                       ! so, run this loop u
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9002) SUBR_NAME,TSEC
- 9002    FORMAT(1X,A,' END  ',F10.3)
+9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

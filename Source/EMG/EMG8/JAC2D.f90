@@ -38,7 +38,8 @@
       USE CONSTANTS_1, ONLY           :  ZERO, ONE, FOUR
       USE PARAMS, ONLY                :  EPSIL
       USE MODEL_STUF, ONLY            :  EID, EMG_IFE, EMG_RFE, ERR_SUB_NAM, NUM_EMG_FATAL_ERRS, TYPE
-  
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
+
       USE JAC2D_USE_IFs
 
       IMPLICIT NONE
@@ -48,6 +49,8 @@
 
       INTEGER(LONG)                   :: I,J               ! DO loop indices
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = JACOBIAN_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
  
       REAL(DOUBLE) , INTENT(IN)       :: SSI               ! A Gauss point coord.
       REAL(DOUBLE) , INTENT(IN)       :: SSJ               ! A Gauss point coord.
@@ -59,6 +62,8 @@
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
   
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'HELPER/JAC2D', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC, WRT_BUG_THIS_TIME, WRT_BUG(7), WRT_BUG(8), WRT_BUG(9)
@@ -129,6 +134,7 @@
                EMG_RFE(NUM_EMG_FATAL_ERRS,1)   = DETJ
             ENDIF
          ENDIF
+         CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
          RETURN
 
       ENDIF
@@ -139,6 +145,8 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

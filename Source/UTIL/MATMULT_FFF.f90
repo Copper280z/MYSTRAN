@@ -35,6 +35,7 @@
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
       USE SUBR_BEGEND_LEVELS, ONLY    :  MATMULT_FFF_BEGEND
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
  
       USE MATMULT_FFF_USE_IFs
 
@@ -48,12 +49,16 @@
       INTEGER(LONG)                   :: I,J,K             ! DO loop indices or counters
       INTEGER(LONG)                   :: NROWB             ! 
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = MATMULT_FFF_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
  
       REAL(DOUBLE) , INTENT(IN)       :: A(NROWA,NCOLA)    ! Input  matrix A
       REAL(DOUBLE) , INTENT(IN)       :: B(NCOLA,NCOLB)    ! Input  matrix B
       REAL(DOUBLE) , INTENT(OUT)      :: C(NROWA,NCOLB)    ! Output matrix C
  
- ! *********************************************************************************************************************************
+! *********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'HELPER/MATMULT_FFF', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -88,6 +93,8 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

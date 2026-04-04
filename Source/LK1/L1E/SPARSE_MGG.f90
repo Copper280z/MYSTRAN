@@ -29,7 +29,7 @@
 ! Add sparse arrays for concentrated masses (array MGGC), scalar masses (array MGGS) and element mass (array EMS) to get the final
 ! sparse G-set mass matrix, MGG. Rows are sorted to be in numerical G-set DOF order and the final MGG is written to file LINK1R
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  ERR, F04, F06, L1R, L1R_MSG, LINK1R, SC1, WRT_ERR, WRT_LOG
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, NCMASS, NDOFG, NGRID, NTERM_MGG, NTERM_MGGC, NTERM_MGGE,         &
                                          NTERM_MGGS, WARN_ERR
@@ -44,6 +44,8 @@
       USE SPARSE_MATRICES, ONLY       :  I2_MGG, I_MGG, J_MGG, MGG, I_MGGC, J_MGGC, MGGC, I_MGGE, J_MGGE, MGGE,                    &
                                          I_MGGS, J_MGGS, MGGS,  SYM_MGGC, SYM_MGGE, SYM_MGGS
       USE SCRATCH_MATRICES, ONLY      :  I_CRS1, J_CRS1, CRS1 
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END,         &
+                                         HOTSPOT_VALUE_ADD, HOTSPOT_WALL_TIME
  
       USE SPARSE_MGG_USE_IFs
 
@@ -71,6 +73,10 @@
       INTEGER(LONG)                   :: RJ(NDOFG)         ! Column numbers corresponding to the terms in REMS(I).
       INTEGER(LONG)                   :: ROW_NUM_START     ! DOF number where TDOF data begins for a grid
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = SPARSE_MGG_BEGEND
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_PHASE_T0
+      REAL(DOUBLE)                    :: HS_LOOP_T0
  
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
       REAL(DOUBLE)                    :: GRID_MGG(6,6)     ! 6 x 6 mass matrix for a grid
@@ -82,6 +88,8 @@
       INTRINSIC                       :: DABS
  
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'SPARSE_MGG', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -93,6 +101,7 @@
 ! Pass # 1: Determine final NTERM_MGGE (may be less due to zero terms)
 
       NZERO = 0
+      HS_PHASE_T0 = HOTSPOT_WALL_TIME()
 i_do0:DO I = 1,NDOFG                                       ! Start conversion.
 
          IS = EMSKEY(I)
@@ -102,6 +111,7 @@ i_do0:DO I = 1,NDOFG                                       ! Start conversion.
 j_do0:   DO J = 1,NDOFG
             IF (DABS(EMS(IS)) < EPS1) THEN
                NZERO = NZERO + 1
+               CALL HOTSPOT_COUNTER_ADD ( 'MGGE_ZERO_DROPS', INT(1,DBL_LONG) )
             ELSE
                NUM = NUM + 1
             ENDIF
@@ -116,10 +126,12 @@ j_do0:   DO J = 1,NDOFG
             FATAL_ERR = FATAL_ERR + 1
             CALL OUTA_HERE ( 'Y' )                         ! Coding error, so quit
          ENDIF
+         CALL HOTSPOT_VALUE_ADD ( 'MGGE_ROWLEN_RAW', DBLE(NUM) )
 
       ENDDO i_do0
 
       NTERM_MGGE = NTERM_MGGE - NZERO
+      CALL HOTSPOT_TIMER_ADD ( 'SPARSE_MGG/ZERO_STRIP', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
 
       WRITE(ERR,146) NTERM_MGGE
       IF (SUPINFO == 'N') THEN
@@ -139,6 +151,7 @@ j_do0:   DO J = 1,NDOFG
       I_MGGE(1) = 1
       WRITE(SC1, * )
       CALL COUNTER_INIT('     Working on grid ', NGRID)
+      HS_LOOP_T0 = HOTSPOT_WALL_TIME()
 i_do: DO I = 1,NGRID
 
          GRID_NUM = GRID_ID(I)
@@ -178,9 +191,12 @@ j_do1:      DO J=1,NDOFG
                FATAL_ERR = FATAL_ERR + 1
                CALL OUTA_HERE ( 'Y' )                      ! Coding error, so quit
             ENDIF
+            CALL HOTSPOT_VALUE_ADD ( 'MGGE_ROWLEN_FINAL', DBLE(NUM) )
 
             IF (NUM /= 1) THEN                             ! Sort row by the shell method so that RJ is in numerical order
+               HS_PHASE_T0 = HOTSPOT_WALL_TIME()
                CALL SORT_INT1_REAL1 ( SUBR_NAME, 'RJ, REMS', NUM, RJ, REMS )
+               CALL HOTSPOT_TIMER_ADD ( 'SPARSE_MGG/ROW_SORT', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
             ENDIF   
 
 j_do3:      DO J = 1,NUM
@@ -193,6 +209,7 @@ j_do3:      DO J = 1,NUM
          ENDDO k_do
          CALL COUNTER_PROGRESS(I)
       ENDDO i_do
+      CALL HOTSPOT_TIMER_ADD ( 'SPARSE_MGG/ROW_EXTRACT', HOTSPOT_WALL_TIME() - HS_LOOP_T0 )
 
       WRITE(SC1,*) CR13
 
@@ -216,6 +233,7 @@ j_do3:      DO J = 1,NUM
 !  (1) add MGGC and MGGE to get CRS1 (do not mult by WTMASS here)
 !  --------------------------------------------------------------
 
+      HS_PHASE_T0 = HOTSPOT_WALL_TIME()
       CALL MATADD_SSS_NTERM ( NDOFG, 'MGGC', NTERM_MGGC, I_MGGC, J_MGGC, SYM_MGGC, 'MGGE', NTERM_MGGE, I_MGGE, J_MGGE, SYM_MGGE,&
                                      'CRS1' , NTERM_CRS1 )
 
@@ -255,6 +273,7 @@ j_do3:      DO J = 1,NUM
          
 
       ENDIF
+      CALL HOTSPOT_TIMER_ADD ( 'SPARSE_MGG/MATADD_MERGES', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
 
 ! Deallocate CRS1
 
@@ -282,6 +301,7 @@ j_do3:      DO J = 1,NUM
       IF (NTERM_MGG > 0) THEN
          DO I=1,NDOFG
             NUM_IN_ROW_I = I_MGG(I+1) - I_MGG(I)
+            CALL HOTSPOT_VALUE_ADD ( 'MGG_ROWLEN_FINAL', DBLE(NUM_IN_ROW_I) )
             DO J=1,NUM_IN_ROW_I
                K = K + 1
                IF (K > NTERM_MGG)  CALL ARRAY_SIZE_ERROR_1 ( SUBR_NAME, K, 'MGG' )
@@ -348,8 +368,10 @@ j_do3:      DO J = 1,NUM
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9002) SUBR_NAME,TSEC
- 9002    FORMAT(1X,A,' END  ',F10.3)
+  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

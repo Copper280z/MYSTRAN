@@ -53,7 +53,8 @@
                                          SE1, STE1, SHELL_AALP, SHELL_A, TREF, TYPE, FCONV, STRESS, NUM_PLIES, INTL_PID, TPLY,     &
                                          EPROP, PLY_NUM
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
- 
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_OPT_MASK, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
+
       USE QMEM1_USE_IFs
 
       IMPLICIT NONE 
@@ -100,6 +101,11 @@
                                                            ! Indicator of no output of elem data to BUG file
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = QMEM1_BEGEND
       INTEGER(LONG)                   :: PLY_RPCOMP_INDEX  ! Index in array RPCOMP where data for ply K begins
+      INTEGER(LONG)                   :: HS_SLOT
+      INTEGER(LONG)                   :: HS_CALL_SLOT
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_CALL_T0
+      CHARACTER(LEN=128)              :: HS_CALL_NAME
 
       REAL(DOUBLE) , INTENT(IN)       :: AREA              ! Element area
       REAL(DOUBLE) , INTENT(IN)       :: XSD(4)            ! Diffs in x coords of quad sides in local coords
@@ -154,6 +160,10 @@
       REAL(DOUBLE)                    :: TBAR              ! Average elem temperature 
 
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'QMEM1', HS_SLOT, HS_T0 )
+      HS_CALL_NAME = 'QMEM1/OPT/' // TRIM(HOTSPOT_OPT_MASK(OPT))
+      CALL HOTSPOT_TIMER_BEGIN ( HS_CALL_NAME, HS_CALL_SLOT, HS_CALL_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC, OPT
@@ -669,6 +679,9 @@
          WRITE(F04,9002) SUBR_NAME,TSEC
  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_CALL_SLOT, HS_CALL_T0 )
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

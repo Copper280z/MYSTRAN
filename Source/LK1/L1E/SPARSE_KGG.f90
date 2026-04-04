@@ -34,7 +34,7 @@
 
 ! (3) Call TDOF_PROC to regenerate TDOF, TDOFI tables if KGG_SINGULARITY_PROC found singularities
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
       USE IOUNT1, ONLY                :  ERR, F04, F06, L1L, L1L_MSG, LINK1L, SC1, SPCFIL, SPC, WRT_ERR, WRT_LOG
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, NDOFG, NGRID, NIND_GRDS_MPCS,                                    &
                                          NTERM_KGG, NUM_PCHD_SPC1, SOL_NAME, WARN_ERR
@@ -48,7 +48,9 @@
       USE STF_ARRAYS, ONLY            :  STFKEY, STF3
       USE SPARSE_MATRICES, ONLY       :  I_KGG, J_KGG, KGG
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
- 
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END,         &
+                                         HOTSPOT_VALUE_ADD, HOTSPOT_WALL_TIME
+
       USE SPARSE_KGG_USE_IFs
 
       IMPLICIT NONE
@@ -82,7 +84,11 @@
       INTEGER(LONG)                   :: ROW_NUM_START      ! DOF number where TDOF data begins for a grid
       INTEGER(LONG)                   :: RJ(NDOFG)          ! Column numbers corresponding to the terms in RSTF(I).
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = SPARSE_KGG_BEGEND
- 
+      INTEGER(LONG)                   :: HS_SLOT
+      REAL(DOUBLE)                    :: HS_T0
+      REAL(DOUBLE)                    :: HS_PHASE_T0
+      REAL(DOUBLE)                    :: HS_LOOP_T0
+
       REAL(DOUBLE)                    :: EPS1               ! A small number to compare real zero
       REAL(DOUBLE)                    :: KGG_II(6,6)        ! 6 x 6 diagonal stiffness matrices for 1 grid
       REAL(DOUBLE)                    :: RSTF(NDOFG)        ! 1D array of terms from STF(I) pertaining to one row of the G-set
@@ -94,6 +100,8 @@
       INTRINSIC                       :: DABS
  
 ! **********************************************************************************************************************************
+      CALL HOTSPOT_TIMER_BEGIN ( 'SPARSE_KGG', HS_SLOT, HS_T0 )
+
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9001) SUBR_NAME,TSEC
@@ -106,6 +114,7 @@
 ! Pass # 1: Determine final NTERM_KGG (may be less due to terms stripped)
 
       NZERO = 0
+      HS_PHASE_T0 = HOTSPOT_WALL_TIME()
       DO I = 1,NDOFG                                        ! Start conversion.
          IS = STFKEY(I)
 
@@ -115,6 +124,7 @@
          DO J = 1,NDOFG
             IF (DABS(STF3(IS)%Col_3) < EPS1) THEN
                NZERO = NZERO + 1
+               CALL HOTSPOT_COUNTER_ADD ( 'KGG_ZERO_DROPS', INT(1,DBL_LONG) )
             ELSE
                NUM_NONZERO_IN_ROW = NUM_NONZERO_IN_ROW + 1
             ENDIF
@@ -126,6 +136,7 @@
          IF (NUM_NONZERO_IN_ROW > NUM_MAX) THEN
             NUM_MAX = NUM_NONZERO_IN_ROW
          ENDIF   
+         CALL HOTSPOT_VALUE_ADD ( 'KGG_ROWLEN_RAW', DBLE(NUM_NONZERO_IN_ROW) )
          IF (IS /= 0) THEN
             WRITE(ERR,1625) SUBR_NAME,I
             WRITE(F06,1625) SUBR_NAME,I
@@ -137,6 +148,7 @@
 
 
       NTERM_KGG = NTERM_KGG - NZERO
+      CALL HOTSPOT_TIMER_ADD ( 'SPARSE_KGG/ZERO_STRIP', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
 
       WRITE(ERR,146) NTERM_KGG
       IF (SUPINFO == 'N') THEN
@@ -185,6 +197,7 @@
       KGG_ROW_NUM = 0
       I_KGG(1) = 1
       CALL COUNTER_INIT('     Working on grid ', NGRID)
+      HS_LOOP_T0 = HOTSPOT_WALL_TIME()
 i_do: DO I = 1,NGRID
          SKIPIT = 'N'
 
@@ -225,15 +238,18 @@ j_do1:      DO J=1,NDOFG
             IF (NUM_NONZERO_IN_ROW > NUM_MAX) THEN
                NUM_MAX = NUM_NONZERO_IN_ROW
             ENDIF   
+            CALL HOTSPOT_VALUE_ADD ( 'KGG_ROWLEN_FINAL', DBLE(NUM_NONZERO_IN_ROW) )
             IF (IS /= 0) THEN
                WRITE(ERR,1625) SUBR_NAME,I
                WRITE(F06,1625) SUBR_NAME,I
                FATAL_ERR = FATAL_ERR + 1
                CALL OUTA_HERE ( 'Y' )                       ! Coding error, so quit
             ENDIF
- 
+
             IF (NUM_NONZERO_IN_ROW /= 1) THEN               ! Sort row by the shell method so that RJ is in numerical order
+               HS_PHASE_T0 = HOTSPOT_WALL_TIME()
                CALL SORT_INT1_REAL1 ( SUBR_NAME, 'RJ, RSTF', NUM_NONZERO_IN_ROW, RJ, RSTF )
+               CALL HOTSPOT_TIMER_ADD ( 'SPARSE_KGG/ROW_SORT', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
             ENDIF   
 
 
@@ -270,10 +286,13 @@ j_do4:   DO J=1,NIND_GRDS_MPCS                           ! on MPC's since they m
             ENDIF
          ENDDO j_do4
          IF (SKIPIT == 'N') THEN
+            HS_PHASE_T0 = HOTSPOT_WALL_TIME()
             CALL KGG_SINGULARITY_PROC ( AGRIDI, KGG_II, NUM_ASPC_BY_COMP )
+            CALL HOTSPOT_TIMER_ADD ( 'SPARSE_KGG/SINGULARITY_PROC', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
          ENDIF
          CALL COUNTER_PROGRESS(I)
       ENDDO i_do
+      CALL HOTSPOT_TIMER_ADD ( 'SPARSE_KGG/ROW_EXTRACT', HOTSPOT_WALL_TIME() - HS_LOOP_T0 )
       IF (DEBUG(17) > 0) THEN                              ! Write trailing seperator for DEBUG output
          WRITE(F06,9902)
       ENDIF
@@ -346,8 +365,10 @@ j_do4:   DO J=1,NIND_GRDS_MPCS                           ! on MPC's since they m
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9002) SUBR_NAME,TSEC
- 9002    FORMAT(1X,A,' END  ',F10.3)
+  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 

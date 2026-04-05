@@ -32,6 +32,7 @@
       USE FILE_OPEN_Interface
       USE GET_ARRAY_ROW_NUM_Interface
       USE GET_GRID_NUM_COMPS_Interface
+      USE SORT_INT2_REAL1_Interface
       USE SORT_INT1_REAL1_Interface
       USE ARRAY_SIZE_ERROR_1_Interface
       USE MGGS_MASS_MATRIX_Interface

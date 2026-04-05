@@ -28,11 +28,12 @@
  
 ! Element mass processor
  
-! EMP generates the portion of the G-set mass matrix due to element mass and puts it into the 1D array EMS of nonzero mass terms
-! above the diagonal. Integer arrays EMSKEY, EMSPNT and EMSCOL are generated to form a linked list for the mass terms. 
- 
+! EMP generates the portion of the G-set mass matrix due to element mass and stores unique nonzero terms in
+! hash-backed row/col/value arrays for later conversion to CRS in SPARSE_MGG.
+
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
+      USE ISO_FORTRAN_ENV, ONLY       :  INT64
       USE IOUNT1, ONLY                :  ERR, F04, F06, F22, F22FIL, F22_MSG, SC1, WRT_BUG, WRT_ERR, WRT_LOG
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, ELDT_BUG_ME_BIT, ELDT_F22_ME_BIT, FATAL_ERR, IBIT, LINKNO, LTERM_MGGE,   &
                                          MBUG, MELDOF, NDOFG, NELE, NGRID, NTERM_MGGE, NSUB
@@ -43,9 +44,10 @@
       USE SUBR_BEGEND_LEVELS, ONLY    :  EMP_BEGEND
       USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
       USE MODEL_STUF, ONLY            :  BGRID, ELDT, ELDOF, ELGP, GRID, NUM_EMG_FATAL_ERRS, ME, OELDT, PLY_NUM, TYPE
-      USE EMS_ARRAYS, ONLY            :  EMS, EMSCOL, EMSKEY, EMSPNT
+      USE EMS_ARRAYS, ONLY            :  EMS_ROW_HM, EMS_COL_HM, EMS_VAL_HM
       USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN,                           &
                                          HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
+      USE MATRIX_ASSEMBLY_FFHASH, ONLY:  FFH_T
  
       USE EMP_USE_IFs
 
@@ -63,11 +65,8 @@
       INTEGER(LONG)                   :: IDUM              ! Dummy variable used when flipping DOF's
       INTEGER(LONG)                   :: IERROR            ! Local error indicator
       INTEGER(LONG)                   :: IGRID             ! Internal grid ID
-      INTEGER(LONG)                   :: IS                ! A pointer into arrays EMSKEY and EMSPNT
-      INTEGER(LONG)                   :: ISS               ! A particular value of IS
       INTEGER(LONG)                   :: KSTART            ! Used in deciding whether to process all elem mass terms or only
 !                                                            the ones on and above the diagonal (controlled by param SPARSTOR)
-      INTEGER(LONG)                   :: MAX_NUM           ! MAX of NTERM_MGGE/NDOFG (used for DEBUG printout)
       INTEGER(LONG)                   :: MGG_ROW           ! A row no. in MGG
       INTEGER(LONG)                   :: MGG_ROWJ          ! Another row no. in EMS
       INTEGER(LONG)                   :: MGG_COL           ! A col no. in MGG
@@ -76,8 +75,10 @@
       INTEGER(LONG)                   :: ROW_NUM_START     ! DOF number where TDOF data begins for a grid
       INTEGER(LONG)                   :: TDOF_ROW_NUM      ! Row number in array TDOF
                                                            ! Indicator for output of elem data to BUG file
+      INTEGER(LONG)                   :: ALLOC_TERMS
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = EMP_BEGEND
       INTEGER(LONG)                   :: HS_SLOT
+      TYPE(FFH_T)                     :: ENTRY_MAP
  
       REAL(DOUBLE)                    :: DQE(MELDOF,NSUB)  ! Dummy array in call to ELEM_TRANSFORM_LBG
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
@@ -98,7 +99,16 @@
 
 ! **********************************************************************************************************************************
       EPS1 = EPSIL(1)
+      NTERM_MGGE = 0
+      ALLOC_TERMS = MAX(1_LONG, LTERM_MGGE)
 
+      IF (ALLOCATED(EMS_ROW_HM)) DEALLOCATE ( EMS_ROW_HM )
+      IF (ALLOCATED(EMS_COL_HM)) DEALLOCATE ( EMS_COL_HM )
+      IF (ALLOCATED(EMS_VAL_HM)) DEALLOCATE ( EMS_VAL_HM )
+      ALLOCATE ( EMS_ROW_HM(ALLOC_TERMS), EMS_COL_HM(ALLOC_TERMS), EMS_VAL_HM(ALLOC_TERMS) )
+      EMS_ROW_HM = 0
+      EMS_COL_HM = 0
+      EMS_VAL_HM = ZERO
 ! Make units for writing errors the error file and output file
 
       OUNT(1) = ERR
@@ -124,12 +134,6 @@
       CALL TDOF_COL_NUM ( 'G ', G_SET_COL_NUM )
  
 ! Process the elements:
- 
-      IS  = 0
-      ISS = IS
-      IF ((DEBUG(10) == 22) .OR. (DEBUG(10) == 23) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
-         CALL DUMPEMS ( '0', 0, 0, 0, 0, 0, 0 )
-      ENDIF
  
       IERROR = 0
 !xx   WRITE(SC1, * )                                       ! Advance 1 line for screen messages         
@@ -223,81 +227,7 @@ mgg_cols:   DO K = KSTART,ELDOF
                   ENDIF
                ENDIF
 
-               IS = EMSKEY(MGG_ROW)                        ! Get pointer to first term in row MGG_ROW of global mass matrix
-               IF (IS == 0) THEN                           ! EMSKEY(MGG_ROW)=0 means no current terms in global mass matrix at row
-                                                           ! MGG_ROW update NTERM_MGGE and reset EMSKEY, EMSCOL, EMSPNT, EMS arrays
-                  NTERM_MGGE = NTERM_MGGE + 1
-                  IF (TYPE == 'QUAD4   ') THEN
-                     CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/CQUAD4', INT(1,DBL_LONG) )
-                  ELSE
-                     CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/OTHER' , INT(1,DBL_LONG) )
-                  ENDIF
-
-                  IF (NTERM_MGGE > LTERM_MGGE) THEN
-                     WRITE(ERR,1624) SUBR_NAME, 'MASS    ', 'LTERM_MGGE', LTERM_MGGE
-                     WRITE(F06,1624) SUBR_NAME, 'MASS    ', 'LTERM_MGGE', LTERM_MGGE
-                     CALL OUTA_HERE ( 'Y' )                        ! MYSTRAN limitation, so quit
-                  ENDIF
-
-                  EMSKEY(MGG_ROW) = NTERM_MGGE
-                  EMSCOL(NTERM_MGGE) = MGG_COL
-                  EMSPNT(NTERM_MGGE) = 0
-                  EMS(NTERM_MGGE) = ME(J,K)
-
-                  IF ((DEBUG(10) == 22) .OR. (DEBUG(10) == 23) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
-                     CALL DUMPEMS ( 'A', J, K, MGG_ROW, MGG_COL, IS, ISS )
-                  ENDIF
-
-               ELSE                                        ! EMSKEY(MGG_ROW) /= 0 means there are already some terms in row MGG_ROW
-
-emspnt0:          DO                                       ! so, run this loop until we find a place to put ME(J,K). If there is
-                                                           ! already a term in this row w/ same DOF's as ME(J,K), loop runs once.
-                                                           ! If not, then this loop runs until it finds EMSPNT=0, and insetrs term.
- 
-                     IF (MGG_COL == EMSCOL(IS)) THEN       ! There is a term that exists with same DOF'S as ME(J,K) so add terms 
-                        CALL HOTSPOT_COUNTER_ADD ( 'MGGE_DUPLICATE_INSERTS', INT(1,DBL_LONG) )
-
-                        EMS(IS) = EMS(IS) + ME(J,K)
-                        IF ((DEBUG(10) == 22) .OR. (DEBUG(10) == 23) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
-                           CALL DUMPEMS ( 'B', J, K, MGG_ROW, MGG_COL, IS, ISS )
-                        ENDIF
-
-                        CYCLE mgg_cols                     ! We have added a term to EMS so exit this loop and do next col of MGG
- 
-                     ELSE                                  ! This is a new term for row J. Need to cycle until we find EMSPNT = 0.
-                                                           ! Then we can put ME(J,K) in EMS
-                        ISS = IS
-                        IS  = EMSPNT(IS)
-                        IF (IS == 0) THEN                  ! We are at end of where terms are in this row, so ME(J,K) goes here 
-                           IF (NTERM_MGGE+1 > LTERM_MGGE) THEN
-                              WRITE(ERR,1624) SUBR_NAME, 'MASS', 'LTERM_MGGE', LTERM_MGGE
-                              WRITE(F06,1624) SUBR_NAME, 'MASS', 'LTERM_MGGE', LTERM_MGGE
-                              CALL OUTA_HERE ( 'Y' )       ! MYSTRAN limitation, so quit
-                           ENDIF
-                           NTERM_MGGE        = NTERM_MGGE+1! Increment NTERM_MGGE
-                           IF (TYPE == 'QUAD4   ') THEN
-                              CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/CQUAD4', INT(1,DBL_LONG) )
-                           ELSE
-                              CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/OTHER' , INT(1,DBL_LONG) )
-                           ENDIF
-                           EMSPNT(ISS)       = NTERM_MGGE  ! EMSPNT for the current ME(J,K) term
-                           EMSPNT(NTERM_MGGE) = 0          ! Latest EMSPNT is set to 0 so we will know when to insert next ME(J,K) 
-                           EMSCOL(NTERM_MGGE) = MGG_COL    ! EMSCOL always is MGG_COL
-                           EMS   (NTERM_MGGE) = ME(J,K)
-                           IF ((DEBUG(10) == 22) .OR. (DEBUG(10) == 23) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
-                              CALL DUMPEMS ( 'C', J, K, MGG_ROW, MGG_COL, IS, ISS )
-                           ENDIF
-
-                           CYCLE mgg_cols                  ! We put ME(J,K) into EMS so exit this loop and do next col of MGG 
-                        ELSE                               ! EMSPNT /= 0 so cycle this loop until we get it = 0
-                           CYCLE emspnt0
-                        ENDIF
- 
-                     ENDIF
-
-                  ENDDO emspnt0 
- 
-               ENDIF
+               CALL ADD_HASH_MASS_TERM ( MGG_ROW, MGG_COL, ME(J,K) )
 
             ENDDO mgg_cols 
 
@@ -310,26 +240,15 @@ emspnt0:          DO                                       ! so, run this loop u
       WRITE(SC1,*) CR13
 
 ! Debug output:
+
+      CALL ENTRY_MAP%RESET()
   
       IF((DEBUG(10) == 21) .OR. (DEBUG(10) == 22) .OR. (DEBUG(10) == 23) .OR.                                                     &
          (DEBUG(10) == 31) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
          WRITE(F06,1260)
-         MAX_NUM = MAX(NTERM_MGGE,NDOFG) 
-         DO I=1,MAX_NUM
-            IF      (MAX_NUM == NTERM_MGGE) THEN
-               IF (NDOFG >= I) THEN
-                  WRITE(F06,1261) I,EMSKEY(I),EMSCOL(I),EMSPNT(I),EMS(I)
-               ELSE
-                  WRITE(F06,1262) I,          EMSCOL(I),EMSPNT(I),EMS(I)
-               ENDIF
-            ELSE IF (MAX_NUM == NDOFG) THEN
-               IF (NTERM_MGGE >= I) THEN
-                  WRITE(F06,1261) I,EMSKEY(I),EMSCOL(I),EMSPNT(I),EMS(I)
-               ELSE
-                  WRITE(F06,1263) I,EMSKEY(I)
-               ENDIF
-            ENDIF
-         ENDDO 
+         DO I=1,NTERM_MGGE
+            WRITE(F06,1261) I, EMS_ROW_HM(I), EMS_COL_HM(I), EMS_VAL_HM(I)
+         ENDDO
          WRITE(F06,*)
       ENDIF
  
@@ -357,13 +276,9 @@ emspnt0:          DO                                       ! so, run this loop u
       RETURN
 
 ! **********************************************************************************************************************************
- 1260 FORMAT(/,'            I   EMSKEY(I)   EMSCOL(I)   EMSPNT(I)           EMS(I)')      
+ 1260 FORMAT(/,'            I   EMS_ROW_HM   EMS_COL_HM        EMS_VAL_HM')
 
- 1261 FORMAT(1X,I12,I12,I12,I12,3X,1ES21.14)
-
- 1262 FORMAT(1X,I12,12X,I12,I12,3X,1ES21.14)
-
- 1263 FORMAT(1X,I12,I12)
+ 1261 FORMAT(1X,I12,I12,I12,3X,1ES21.14)
 
  1624 FORMAT(' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' TOO MANY NON-ZERO TERMS IN THE ',A,' MATRIX. LIMIT IS ',A,' = ',I12)
@@ -379,75 +294,63 @@ emspnt0:          DO                                       ! so, run this loop u
  
       CONTAINS
  
-! ##################################################################################################################################
+      SUBROUTINE ADD_HASH_MASS_TERM ( ROW_NUM, COL_NUM, VALUE )
 
-      SUBROUTINE DUMPEMS ( WHAT, J, K, MGG_ROW, MGG_COL, IS, ISS )
+      INTEGER(LONG), INTENT(IN)       :: ROW_NUM
+      INTEGER(LONG), INTENT(IN)       :: COL_NUM
+      REAL(DOUBLE) , INTENT(IN)       :: VALUE
 
-! Prints out info on the formulation of stiffness arrays for subr ESP, which generates the arrays
+      INTEGER(LONG)                   :: IDX
+      INTEGER(INT64)                  :: KEY
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
-      USE IOUNT1, ONLY                :  WRT_ERR, WRT_LOG, ERR, F04, F06
-      USE SCONTR, ONLY                :  NTERM_MGGE
-      USE MODEL_STUF, ONLY            :  EID
-      USE EMS_ARRAYS, ONLY            :  EMS, EMSCOL, EMSKEY, EMSPNT
+      KEY = PACK_MATRIX_KEY(ROW_NUM, COL_NUM)
+      IDX = ENTRY_MAP%GET_INDEX(KEY)
 
-      IMPLICIT NONE
-
-      CHARACTER(1*BYTE), INTENT(IN)   :: WHAT              ! Indicator of where this subr was called from in subr EMP
-
-      INTEGER(LONG)                   :: IS                ! A pointer into arrays EMSKEY and EMSPNT
-      INTEGER(LONG)                   :: ISS               ! A particular value of IS
-      INTEGER(LONG)    , INTENT(IN)   :: J                 ! Row number of elem mass matrix term, ME(J,K)
-      INTEGER(LONG)    , INTENT(IN)   :: K                 ! Col number of elem mass matrix term, ME(J,K)
-      INTEGER(LONG)    , INTENT(IN)   :: MGG_COL           ! Row number of MGG matrix where ME(J,K) goes 
-      INTEGER(LONG)    , INTENT(IN)   :: MGG_ROW           ! Col number of MGG matrix where ME(J,K) goes 
-
-! **********************************************************************************************************************************
-      IF      (WHAT == '0') THEN
-
-         WRITE(F06,8910)
-
-      ELSE IF (WHAT == 'A') THEN
-
-         WRITE(F06,8930) EID, J, K, MGG_ROW, MGG_COL, EMSKEY(MGG_ROW), NTERM_MGGE, EMSCOL(NTERM_MGGE), EMSPNT(NTERM_MGGE),         &
-                         EMS(NTERM_MGGE), IS, ISS
-
-      ELSE IF (WHAT == 'B') THEN
-
-         IF (ISS /= 0) THEN
-         WRITE(F06,8940) EID, J, K, MGG_ROW, MGG_COL, EMSKEY(MGG_ROW), NTERM_MGGE, EMSCOL(NTERM_MGGE), EMSPNT(NTERM_MGGE),        &
-                         EMS(NTERM_MGGE), IS, ISS, EMSPNT(ISS), EMS(IS)
-
+      IF (IDX >= 0) THEN
+         CALL HOTSPOT_COUNTER_ADD ( 'MGGE_DUPLICATE_INSERTS', INT(1,DBL_LONG) )
+         EMS_VAL_HM(ENTRY_MAP%VALS(IDX)) = EMS_VAL_HM(ENTRY_MAP%VALS(IDX)) + VALUE
+      ELSE
+         NTERM_MGGE = NTERM_MGGE + 1
+         IF (TYPE == 'QUAD4   ') THEN
+            CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/CQUAD4', INT(1,DBL_LONG) )
          ELSE
-         WRITE(F06,8941) EID, J, K, MGG_ROW, MGG_COL, EMSKEY(MGG_ROW), NTERM_MGGE, EMSCOL(NTERM_MGGE), EMSPNT(NTERM_MGGE),        &
-                         EMS(NTERM_MGGE), IS, ISS,              EMS(IS)
+            CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/OTHER' , INT(1,DBL_LONG) )
          ENDIF
-
-      ELSE IF (WHAT == 'C') THEN
-
-         WRITE(F06,8950) EID, J, K, MGG_ROW, MGG_COL, EMSKEY(MGG_ROW), NTERM_MGGE, EMSCOL(NTERM_MGGE), EMSPNT(NTERM_MGGE),         &
-                         EMS(NTERM_MGGE), IS, ISS
-
+         IF (NTERM_MGGE > LTERM_MGGE) THEN
+            WRITE(ERR,'(A,A,/,A,A,A,I12)')                                                                                           &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+                  '              TOO MANY NON-ZERO TERMS IN THE ', 'MASS', ' MATRIX. LIMIT IS LTERM_MGGE = ', LTERM_MGGE
+            WRITE(F06,'(A,A,/,A,A,A,I12)')                                                                                           &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+                  '              TOO MANY NON-ZERO TERMS IN THE ', 'MASS', ' MATRIX. LIMIT IS LTERM_MGGE = ', LTERM_MGGE
+            CALL OUTA_HERE ( 'Y' )
+         ENDIF
+         EMS_ROW_HM(NTERM_MGGE) = ROW_NUM
+         EMS_COL_HM(NTERM_MGGE) = COL_NUM
+         EMS_VAL_HM(NTERM_MGGE) = VALUE
+         CALL ENTRY_MAP%STORE_VALUE ( KEY, NTERM_MGGE, IDX )
+         IF (IDX < 0) THEN
+            WRITE(ERR,'(A,A,/,A,A,A,I12)')                                                                                           &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+                  '              TOO MANY NON-ZERO TERMS IN THE ', 'MASS', ' MATRIX. LIMIT IS HASH INDEX = ', IDX
+            WRITE(F06,'(A,A,/,A,A,A,I12)')                                                                                           &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+                  '              TOO MANY NON-ZERO TERMS IN THE ', 'MASS', ' MATRIX. LIMIT IS HASH INDEX = ', IDX
+            CALL OUTA_HERE ( 'Y' )
+         ENDIF
       ENDIF
 
-      RETURN
+      END SUBROUTINE ADD_HASH_MASS_TERM
 
-! **********************************************************************************************************************************
- 8910 FORMAT(4X,'ELEM       J       K MGG_ROW MGG_COL  EMSKEY  NKTERM  EMSCOL  EMSPNT      EMS         IS     ISS  EMSPNT     EMS'&
-          ,/,4X,' ID                                 (MGG_ROW)       (NKTERM) (NKTERM)   (NKTERM)                   (ISS)     (IS)')
+! ##################################################################################################################################
 
- 8920 FORMAT(1X,'---------------------------------------------------------------------------------------------------------------', &
-'--------')
+      PURE INTEGER(INT64) FUNCTION PACK_MATRIX_KEY ( ROW_NUM, COL_NUM )
 
- 8930 FORMAT(1X,'A',I6,I8,I8,I8,I8,I8,I8,I8,I8,1ES12.3,I8,I8)
+      INTEGER(LONG), INTENT(IN)       :: ROW_NUM
+      INTEGER(LONG), INTENT(IN)       :: COL_NUM
 
- 8940 FORMAT(1X,'B',I6,I8,I8,I8,I8,I8,I8,I8,I8,1ES12.3,I8,I8,I8,1ES12.3)
+      PACK_MATRIX_KEY = IOR( SHIFTL(INT(ROW_NUM,INT64), 32), INT(COL_NUM,INT64) )
 
- 8941 FORMAT(1X,'B',I6,I8,I8,I8,I8,I8,I8,I8,I8,1ES12.3,I8,I8,' -------',1ES12.3)
-
- 8950 FORMAT(1X,'C',I6,I8,I8,I8,I8,I8,I8,I8,I8,1ES12.3,I8,I8)
-
-! **********************************************************************************************************************************
-      END SUBROUTINE DUMPEMS
+      END FUNCTION PACK_MATRIX_KEY
 
       END SUBROUTINE EMP

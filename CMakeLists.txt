@@ -311,14 +311,14 @@ add_executable(
 if(USE_SUPERLU_MT)
   if(PLAT STREQUAL "_PTHREAD")
     message(WARNING "We recommend using OpenMP, not pthread!")
-    target_link_libraries(mystran superlu_mt_PTHREAD f2c)
+    target_link_libraries(mystran PRIVATE superlu_mt_PTHREAD f2c)
   elseif(PLAT STREQUAL "_OPENMP")
-    target_link_libraries(mystran superlu_mt_OPENMP f2c)
+    target_link_libraries(mystran PRIVATE superlu_mt_OPENMP f2c)
   endif()
 
   target_compile_definitions(mystran PRIVATE USE_SUPERLU_MT)
 else()
-  target_link_libraries(mystran superlu f2c)
+  target_link_libraries(mystran PRIVATE superlu f2c)
 endif()
 
 set_target_properties(

@@ -54,11 +54,9 @@
 !                   = 3 print both grid and elem temperature data in subr TEMPERATURE_DATA_PROC
 !        DEBUG   9  > 0 print debug info in subr PINFLG (pin flag processing for elements)
 
-!        DEBUG  10  = 11 or 33 prints data on algorithm to create arrays STFKEY, STFPNT, STFCOL, STF at end of subr ESP
-!                   = 12 or 32 prints detailed data on algorithm to create arrays STFKEY, STFPNT, STFCOL, STF in subr SPARSE 
-!                   = 13 or 33 also prints template of nonzero terms in K in subr ESP if PARAM SETLKTK = 1 or 2 
-!                   = 21 or 33 prints data on algorithm to create arrays EMSKEY, EMSPNT, EMSCOL, EMS at end of subr ESP
-!                   = 22 or 32 prints detailed data on algorithm to create arrays EMSKEY, EMSPNT, EMSCOL, EMS in subr SPARSE 
+!        DEBUG  10  = 11 or 31 prints assembled hash-backed row/col/value data at end of subr ESP or EMP
+!                   = 13 or 33 also prints template of nonzero terms in K in subr ESP if PARAM SETLKTK = 1 or 2
+!                   = 21 or 31 prints assembled hash-backed row/col/value data at end of subr EMP
 
 !        DEBUG  11  = 1 print individual 6x6 r.b. displ matrices in basic and global coords for each grid (subr RB_DISP_MATRIX_PROC)
 !                   = 2 print ngrid by 6 rigid body displ matrix in global coords for the model

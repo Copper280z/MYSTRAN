@@ -135,7 +135,6 @@
       USE IOUNT1, ONLY                :  ERR, F04, F06, WRT_ERR, WRT_LOG
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, NELE, SOL_NAME
       USE TIMDAT, ONLY                :  TSEC
-      USE PARAMS, ONLY                :  SPARSTOR
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE SUBR_BEGEND_LEVELS, ONLY    :  ESP0_BEGEND
       USE MODEL_STUF, ONLY            :  EDAT, EPNT, ETYPE, ELGP, TYPE
@@ -149,8 +148,6 @@
       INTEGER(LONG)                   :: DELTA_LTERM       ! Increment of LTERM for one element
       INTEGER(LONG)                   :: I                 ! DO loop index
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = ESP0_BEGEND + 1
- 
- 
 ! **********************************************************************************************************************************
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
@@ -167,13 +164,8 @@
  
          CALL GET_ELGP ( I )
 
-         IF (SPARSTOR == 'SYM   ') THEN
-            DELTA_LTERM = 3*ELGP*(6*ELGP + 1)
-            LTERM = LTERM + DELTA_LTERM        ! SYM has terms only on diag and above
-         ELSE
-            DELTA_LTERM = (6*ELGP)*(6*ELGP)
-            LTERM = LTERM + DELTA_LTERM        ! NONSYM can have full matrix
-         ENDIF
+         DELTA_LTERM = (6*ELGP)*(6*ELGP)
+         LTERM = LTERM + DELTA_LTERM
 
     
       ENDDO   
@@ -221,6 +213,8 @@
       USE SCONTR, ONLY                :  KMAT_BW, KMAT_DEN, NDOFG, BLNK_SUB_NAM
       USE TIMDAT, ONLY                :  TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  ESP0_BEGEND
+      USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
+      USE SCONTR, ONLY                :  SOL_NAME
  
       IMPLICIT NONE
  
@@ -241,6 +235,9 @@
 ! Estimate number of nonzero terms as the number of rows in the stiff matrix times the stiff matrix bandwidth:
  
       LTERM = NDOFG*KMAT_BW
+      IF (.NOT.((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2))) THEN
+         LTERM = (LTERM + 1_LONG)/2_LONG
+      ENDIF
 
       IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
          WRITE(ERR,4321) LTERM, SETLKTK, NDOFG, KMAT_BW
@@ -309,6 +306,9 @@
 ! Estimate number of nonzero terms as the number of rows in the stiff matrix times the stiff matrix bandwidth:
  
       LTERM = NINT((KMAT_DEN/ONE_HUNDRED)*NDOFG*NDOFG)  ! KMAT_DEN is in %
+      IF (.NOT.((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2))) THEN
+         LTERM = (LTERM + 1_LONG)/2_LONG
+      ENDIF
 
       IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
          WRITE(ERR,4321) LTERM, SETLKTK, NDOFG, KMAT_DEN
@@ -353,7 +353,7 @@
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  WRT_LOG, ERR, F04, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, MELDOF, NELE, NSUB, SOL_NAME
-      USE PARAMS, ONLY                :  EPSIL, SETLKTK, SPARSTOR
+      USE PARAMS, ONLY                :  EPSIL, SETLKTK
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
@@ -368,9 +368,7 @@
       INTEGER(LONG), INTENT(OUT)      :: LTERM             ! Count of number of estimated terms in KGG or KGGD
       INTEGER(LONG)                   :: I,J,K             ! DO loop indices
       INTEGER(LONG)                   :: IERROR            ! Local error indicator
-      INTEGER(LONG)                   :: KSTART            ! Index
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = ESP0_BEGEND
-
       REAL(DOUBLE)                    :: DQE(MELDOF,NSUB)  ! Dummy array in call to ELEM_TRANSFORM_LBG
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
  
@@ -438,12 +436,7 @@ elems:DO I=1,NELE
 ! Count nonzero terms in transformed KE
 
 kgg_rows:DO J=1,ELDOF
-            IF (SPARSTOR == 'SYM') THEN
-               KSTART = J
-            ELSE
-               KSTART = 1
-            ENDIF
-kgg_cols:   DO K=KSTART,ELDOF
+kgg_cols:   DO K=1,ELDOF
                IF (DABS(KE(J,K)) < EPS1) THEN
                   CYCLE kgg_cols
                ELSE
@@ -496,46 +489,5 @@ kgg_cols:   DO K=KSTART,ELDOF
 ! **********************************************************************************************************************************
  
       END SUBROUTINE ESP0_3
-
-! ##################################################################################################################################
-
-      SUBROUTINE DUMPSTF0 ( WHAT, J, K, KGG_ROW, KGG_COL )
-
-! Prints out info on the formulation of stiffness arrays for subr ESP0_3 which estimates LTERM for subr ESP
-
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
-      USE IOUNT1, ONLY                :  WRT_ERR, WRT_LOG, ERR, F04, F06
-      USE MODEL_STUF, ONLY            :  EID
-
-      IMPLICIT NONE
-
-      CHARACTER(1*BYTE), INTENT(IN)   :: WHAT              ! Indicator of where this subr was called from in subr ESP0_3
-
-      INTEGER(LONG)    , INTENT(IN)   :: J                 ! Row number of elem stiff matrix term, KE(J,K)
-      INTEGER(LONG)    , INTENT(IN)   :: K                 ! Col number of elem stiff matrix term, KE(J,K)
-      INTEGER(LONG)    , INTENT(IN)   :: KGG_COL           ! Row number of KGG matrix where KE(J,K) goes 
-      INTEGER(LONG)    , INTENT(IN)   :: KGG_ROW           ! Col number of KGG matrix where KE(J,K) goes 
-
-! **********************************************************************************************************************************
-      IF      (WHAT == '0') THEN
-
-         WRITE(F06,8910)
-
-      ELSE IF (WHAT == 'A') THEN
-
-         WRITE(F06,8930) EID, J, K, KGG_ROW, KGG_COL
-
-      ENDIF
-
-      RETURN
-
-! **********************************************************************************************************************************
- 8910 FORMAT(1X,'     ELEM        J        K  KGG_ROW  KGG_COL') 
-
- 8930 FORMAT(1X,'A',I8,I8,I8,I8,I8)
-
-! **********************************************************************************************************************************
-
-      END SUBROUTINE DUMPSTF0
 
       END SUBROUTINE ESP0

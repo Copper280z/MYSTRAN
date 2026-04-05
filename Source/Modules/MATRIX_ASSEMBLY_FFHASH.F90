@@ -1,0 +1,12 @@
+      MODULE MATRIX_ASSEMBLY_FFHASH
+
+      USE ISO_FORTRAN_ENV, ONLY : INT32, INT64
+      USE PENTIUM_II_KIND, ONLY : LONG
+
+      IMPLICIT NONE
+
+#define FFH_KEY_TYPE integer(int64)
+#define FFH_VAL_TYPE integer(LONG)
+#include "../../ffhash/ffhash_inc.f90"
+
+      END MODULE MATRIX_ASSEMBLY_FFHASH

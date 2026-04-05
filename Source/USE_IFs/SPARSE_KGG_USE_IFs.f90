@@ -36,6 +36,7 @@
       USE TDOF_COL_NUM_Interface
       USE GET_ARRAY_ROW_NUM_Interface
       USE GET_GRID_NUM_COMPS_Interface
+      USE SORT_INT2_REAL1_Interface
       USE SORT_INT1_REAL1_Interface
       USE KGG_SINGULARITY_PROC_Interface
       USE WRITE_SPARSE_CRS_Interface

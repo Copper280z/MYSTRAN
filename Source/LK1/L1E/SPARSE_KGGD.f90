@@ -1,79 +1,63 @@
 ! ##################################################################################################################################
-! Begin MIT license text.                                                                                    
+! Begin MIT license text.
 ! _______________________________________________________________________________________________________
-                                                                                                         
-! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)                                              
-                                                                                                         
-! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and      
+!
+! Copyright 2022 Dr William R Case, Jr (mystransolver@gmail.com)
+!
+! Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 ! associated documentation files (the "Software"), to deal in the Software without restriction, including
 ! without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to   
-! the following conditions:                                                                              
-                                                                                                         
-! The above copyright notice and this permission notice shall be included in all copies or substantial   
-! portions of the Software and documentation.                                                                              
-                                                                                                         
-! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS                                
-! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,                            
-! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE                            
-! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER                                 
-! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,                          
-! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN                              
-! THE SOFTWARE.                                                                                          
+! copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to
+! the following conditions:
+!
+! The above copyright notice and this permission notice shall be included in all copies or substantial
+! portions of the Software and documentation.
+!
+! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+! OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+! AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+! LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+! THE SOFTWARE.
 ! _______________________________________________________________________________________________________
-                                                                                                        
-! End MIT license text.                                                                                      
- 
-      SUBROUTINE SPARSE_KGGD
- 
-! Converts the system KGGD differential stiff matrix from a sparse linked list format to a sparse row, col, val format. It sorts
-! each row to be in G-set DOF numerical order.
+!
+! End MIT license text.
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
-      USE IOUNT1, ONLY                :  ERR, F04, F06, SC1, SPCFIL, SPC, WRT_ERR, WRT_LOG
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, NDOFG, NGRID, NIND_GRDS_MPCS,                                    &
-                                         NTERM_KGGD, NUM_PCHD_SPC1, SOL_NAME, WARN_ERR
+      SUBROUTINE SPARSE_KGGD
+
+! Converts the hash-assembled KGGD differential stiffness matrix to CRS format.
+
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
+      USE IOUNT1, ONLY                :  ERR, F04, F06, SC1, WRT_ERR, WRT_LOG
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, NDOFG, NGRID, NTERM_KGGD, WARN_ERR
       USE TIMDAT, ONLY                :  TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  SPARSE_KGGD_BEGEND
-      USE CONSTANTS_1, ONLY           :  ZERO
-      USE PARAMS, ONLY                :  AUTOSPC, AUTOSPC_RAT, EPSIL, PRTSTIFF, SPC1QUIT, SUPINFO, SUPWARN
-      USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
-      USE MODEL_STUF, ONLY            :  GRID, GRID_ID, GRID_SEQ, MPC_IND_GRIDS, INV_GRID_SEQ
-      USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START, TDOFI, TSET
-      USE STF_ARRAYS, ONLY            :  STFKEY, STF3
+      USE PARAMS, ONLY                :  EPSIL, PRTSTIFF, SUPINFO
+      USE STF_ARRAYS, ONLY            :  STF_ROW_HM, STF_COL_HM, STF_VAL_HM
       USE SPARSE_MATRICES, ONLY       :  I_KGGD, J_KGGD, KGGD
- 
+
       USE SPARSE_KGGD_USE_IFs
 
       IMPLICIT NONE
- 
-      CHARACTER, PARAMETER            :: CR13 = CHAR(13)   ! This causes a carriage return simulating the "+" action in a FORMAT
+
+      CHARACTER, PARAMETER            :: CR13 = CHAR(13)
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'SPARSE_KGGD'
- 
-      INTEGER(LONG)                   :: G_SET_COL          ! Col in TDOF where G-set DOF's are
-      INTEGER(LONG)                   :: I,J,K,L,N          ! DO loop indices
-      INTEGER(LONG)                   :: IGRID              ! Internal grid ID
-      INTEGER(LONG)                   :: IS                 ! Index into array STF3
-      INTEGER(LONG)                   :: KGGD_COL_NUM       ! The col num in G-set stiff matrix where stiff for DOF I begins
-      INTEGER(LONG)                   :: KGGD_ROW_NUM       ! The row num in G-set stiff matrix where stiff for DOF I begins
-      INTEGER(LONG)                   :: KGGD_II_COL_NUM    ! Col number in the 6x6 stiff matrix for 1 grid
-      INTEGER(LONG)                   :: KTERM_KGGD         ! Count of terms written to KGGD to compare with NTERM_KGGD
-      INTEGER(LONG)                   :: NUM_NONZERO_IN_ROW ! Count of the actual number of nonzero terms in a row of KGGD
-      INTEGER(LONG)                   :: NUM_MAX = 0        ! largest number of terms in any row of the KGGD stiffness matrix
-      INTEGER(LONG)                   :: NUM_COMPS          ! Number of displ components (1 for SPOINT, 6 for physical grid)
-      INTEGER(LONG)                   :: NZERO   = 0        ! Count on zero terms in array STF
-      INTEGER(LONG)                   :: ROW_NUM_START      ! DOF number where TDOF data begins for a grid
-      INTEGER(LONG)                   :: RJ(NDOFG)          ! Column numbers corresponding to the terms in RSTF(I).
+
+      INTEGER(LONG)                   :: I, J
+      INTEGER(LONG)                   :: KTERM_KGGD
+      INTEGER(LONG)                   :: NUM_MAX = 0
+      INTEGER(LONG)                   :: NUM_NONZERO_IN_ROW
+      INTEGER(LONG)                   :: NZERO
+      INTEGER(LONG)                   :: POS
+      INTEGER(LONG)                   :: RAW_NTERM
+      INTEGER(LONG)                   :: ROW_END
+      INTEGER(LONG)                   :: ROW_START
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = SPARSE_KGGD_BEGEND
- 
-      REAL(DOUBLE)                    :: EPS1               ! A small number to compare real zero
-      REAL(DOUBLE)                    :: KGGD_II(6,6)       ! 6 x 6 diagonal stiffness matrices for 1 grid
-      REAL(DOUBLE)                    :: RSTF(NDOFG)        ! 1D array of terms from STF(I) pertaining to one row of the G-set
-!                                                             stiffness matrix. Initially, the cols are not in increasing global
-!                                                             DOF order. RSTF is sorted so that the cols are in incr DOF order.
+      REAL(DOUBLE)                    :: EPS1
 
       INTRINSIC                       :: DABS
- 
+
 ! **********************************************************************************************************************************
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
@@ -83,66 +67,57 @@
 
 ! **********************************************************************************************************************************
       EPS1 = EPSIL(1)
-
-! Pass # 1: Determine final NTERM_KGGD (may be less due to terms stripped)
+      RAW_NTERM = NTERM_KGGD
 
       NZERO = 0
-      DO I = 1,NDOFG                                        ! Start conversion.
-         IS = STFKEY(I)
-
-         IF (IS == 0) CYCLE                                 ! Check for null row in stiffness matrix and CYCLE if it is
-
-         NUM_NONZERO_IN_ROW = 0                             ! Count zero terms so we can debit NTERM_KGGD before writing it to file
-         DO J = 1,NDOFG
-            IF (DABS(STF3(IS)%Col_3) < EPS1) THEN
-               NZERO = NZERO + 1
-            ELSE
-               NUM_NONZERO_IN_ROW = NUM_NONZERO_IN_ROW + 1
-            ENDIF
-            IS = STF3(IS)%Col_2
-            IF (IS == 0) THEN
-               EXIT
-            ENDIF
-         ENDDO
-         IF (NUM_NONZERO_IN_ROW > NUM_MAX) THEN
-            NUM_MAX = NUM_NONZERO_IN_ROW
-         ENDIF   
-         IF (IS /= 0) THEN
-            WRITE(ERR,1625) SUBR_NAME,I
-            WRITE(F06,1625) SUBR_NAME,I
-            FATAL_ERR = FATAL_ERR + 1
-            CALL OUTA_HERE ( 'Y' )                          ! Coding error, so quit
+      POS = 0
+      DO I=1,RAW_NTERM
+         IF (DABS(STF_VAL_HM(I)) < EPS1) THEN
+            NZERO = NZERO + 1
+         ELSE
+            POS = POS + 1
+            STF_ROW_HM(POS) = STF_ROW_HM(I)
+            STF_COL_HM(POS) = STF_COL_HM(I)
+            STF_VAL_HM(POS) = STF_VAL_HM(I)
          ENDIF
-
-      ENDDO    
-
-
-      NTERM_KGGD = NTERM_KGGD - NZERO
+      ENDDO
+      NTERM_KGGD = POS
 
       WRITE(ERR,146) NTERM_KGGD
       IF (SUPINFO == 'N') THEN
          WRITE(F06,146) NTERM_KGGD
       ENDIF
 
-      CALL ALLOCATE_SPARSE_MAT ( 'KGGD', NDOFG, NTERM_KGGD, SUBR_NAME )
-
-! **********************************************************************************************************************************
-! Pass # 2: Reformulate rows
-
-
       IF (NTERM_KGGD <= 0) THEN
          WRITE(ERR,1611) NTERM_KGGD
          WRITE(F06,1611) NTERM_KGGD
          FATAL_ERR = FATAL_ERR + 1
-         CALL OUTA_HERE ( 'Y' )                             ! Quit if the no. nonzero terms in KGGD is <= 0
+         CALL OUTA_HERE ( 'Y' )
       ENDIF
 
-      KTERM_KGGD = 0                                        ! I runs over the number of rows (or grids)
-      CALL TDOF_COL_NUM ( 'G ', G_SET_COL )
-      KGGD_ROW_NUM = 0
-      I_KGGD(1) = 1
+      CALL ALLOCATE_SPARSE_MAT ( 'KGGD', NDOFG, NTERM_KGGD, SUBR_NAME )
 
-!xx   WRITE(SC1, * )
+      IF (NTERM_KGGD > 1) THEN
+         CALL SORT_INT2_REAL1 ( SUBR_NAME, 'KGGD hash triplets', NTERM_KGGD, STF_ROW_HM(1:NTERM_KGGD), STF_COL_HM(1:NTERM_KGGD),  &
+                                STF_VAL_HM(1:NTERM_KGGD) )
+         POS = 1
+         DO WHILE (POS <= NTERM_KGGD)
+            ROW_START = POS
+            DO WHILE ((POS <= NTERM_KGGD) .AND. (STF_ROW_HM(POS) == STF_ROW_HM(ROW_START)))
+               POS = POS + 1
+            ENDDO
+            ROW_END = POS - 1
+            NUM_NONZERO_IN_ROW = ROW_END - ROW_START + 1
+            IF (NUM_NONZERO_IN_ROW > 1) THEN
+               CALL SORT_INT1_REAL1 ( SUBR_NAME, 'KGGD row cols', NUM_NONZERO_IN_ROW, STF_COL_HM(ROW_START:ROW_END),             &
+                                      STF_VAL_HM(ROW_START:ROW_END) )
+            ENDIF
+         ENDDO
+      ENDIF
+
+      KTERM_KGGD = 0
+      POS = 1
+      I_KGGD(1) = 1
       CALL COUNTER_INIT('     Working on grid ', NGRID)
 i_do: DO I = 1,NGRID
 
@@ -232,6 +207,10 @@ j_do3:      DO J=1,NUM_NONZERO_IN_ROW
          WRITE(F06,101) NUM_MAX
       ENDIF
 
+      IF (ALLOCATED(STF_ROW_HM)) DEALLOCATE ( STF_ROW_HM )
+      IF (ALLOCATED(STF_COL_HM)) DEALLOCATE ( STF_COL_HM )
+      IF (ALLOCATED(STF_VAL_HM)) DEALLOCATE ( STF_VAL_HM )
+
 ! **********************************************************************************************************************************
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
@@ -247,11 +226,5 @@ j_do3:      DO J=1,NUM_NONZERO_IN_ROW
   146 FORMAT(' *INFORMATION: NUMBER OF NONZERO TERMS IN THE KGGD STIFFNESS MATRIX IS                 = ',I12,/)
 
  1611 FORMAT(' *ERROR  1611: THE G-SET DIFFERENTIAL STIFF MATRIX, KGGD, MUST HAVE SOME NONZERO TERMS. HOWEVER IT HAS ',I12,' TERMS')
-
- 1625 FORMAT(' *ERROR  1625: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
-                    ,/,14X,' 1ST COL OF ARRAY STF3 INDICATES THERE IS MORE DATA IN ARRAY STF3 FOR ROW ',I12,' OF THE KGGD STIFF'   &
-                    ,/,14X,' MATRIX ALTHOUGH THE DOF COUNT IS AT THE END OF THE ROW')
-
-! **********************************************************************************************************************************
 
       END SUBROUTINE SPARSE_KGGD

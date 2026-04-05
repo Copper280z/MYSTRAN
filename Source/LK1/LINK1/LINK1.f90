@@ -241,11 +241,6 @@ res19:IF (RESTART == 'N') THEN
             ENDIF
       
             CALL OURTIM
-            MODNAM = 'ALLOCATE MEM FOR EMSKEY, EMSCOL, EMSPNT, EMS'
-            WRITE(SC1,1092) LINKNO,MODNAM,HOUR,MINUTE,SEC,SFRAC
-            CALL ALLOCATE_EMS_ARRAYS ( SUBR_NAME )
-      
-            CALL OURTIM
             MODNAM = 'ELEMENT MASS MATRIX PROCESSOR               '
             WRITE(SC1,1092) LINKNO,MODNAM,HOUR,MINUTE,SEC,SFRAC
             CALL EMP
@@ -275,7 +270,6 @@ res19:IF (RESTART == 'N') THEN
             WRITE(SC1,1092) LINKNO,MODNAM,HOUR,MINUTE,SEC,SFRAC
             CALL SPARSE_MGG
 
-            CALL DEALLOCATE_EMS_ARRAYS
             CALL DEALLOCATE_L1_MGG ( 'MGGE'   )
             CALL DEALLOCATE_L1_MGG ( 'MGGC'   )
             CALL DEALLOCATE_L1_MGG ( 'MGGS'   )
@@ -389,11 +383,6 @@ res19:IF (RESTART == 'N') THEN
          ENDIF
    
          if (setlktk /= 3) then                            ! Subr ESP0 estimated LTERM conservatively. Now allocate this amount
-            CALL OURTIM
-            MODNAM = 'ALLOCATE MEM FOR STFKEY, STFCOL, STFPNT, STF'
-            WRITE(SC1,1092) LINKNO,MODNAM,HOUR,MINUTE,SEC,SFRAC
-            CALL ALLOCATE_STF_ARRAYS ( 'STFKEY', SUBR_NAME )
-            CALL ALLOCATE_STF_ARRAYS ( 'STF3', SUBR_NAME )
          else
             Write(err,*) '*ERROR     : PROGRAMMING ERROR IN SUBR ',SUBR_NAME,' SETLKTK CANNOT = 3'
             Write(f06,*) '*ERROR     : PROGRAMMING ERROR IN SUBR ',SUBR_NAME,' SETLKTK CANNOT = 3'
@@ -439,16 +428,12 @@ res19:IF (RESTART == 'N') THEN
             WRITE(SC1,1092) LINKNO,MODNAM,HOUR,MINUTE,SEC,SFRAC
             CALL SPARSE_KGGD
             CALL DEALLOCATE_MODEL_STUF ( 'MPC_IND_GRIDS' )
-            CALL DEALLOCATE_STF_ARRAYS ( 'STFKEY' )
-            CALL DEALLOCATE_STF_ARRAYS ( 'STF3' )
          ELSE
             CALL OURTIM
             MODNAM = 'SPARSE KGG PROCESSOR                        '
             WRITE(SC1,1092) LINKNO,MODNAM,HOUR,MINUTE,SEC,SFRAC
             CALL SPARSE_KGG
             CALL DEALLOCATE_MODEL_STUF ( 'MPC_IND_GRIDS' )
-            CALL DEALLOCATE_STF_ARRAYS ( 'STFKEY' )
-            CALL DEALLOCATE_STF_ARRAYS ( 'STF3' )
          ENDIF
 
 ! Write DOF tables and deallocate

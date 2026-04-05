@@ -32,29 +32,31 @@
 ! diagonal.
  
 ! ESP processes the elements sequentially to generate element KE matrix using the EMG set of routines. The element
-! stiffness are transformed from local to basic to global coords for each grid and then merged into the system
-! stiffness, STF, array. See explanation, with an example, in module STF_ARRAYS
+! stiffness are transformed from local to basic to global coords for each grid and then merged into
+! hash-backed row/col/value arrays for later conversion to CRS.
 
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE, DBL_LONG
-      USE IOUNT1, ONLY                :  ERR, F04, F06, F23, F23FIL, F23_MSG, F24, F24FIL, F24_MSG, FILE_NAM_MAXLEN, SC1, SCR,     &
+      USE ISO_FORTRAN_ENV, ONLY       :  INT64
+      USE IOUNT1, ONLY                :  ERR, F04, F06, F23, F23FIL, F23_MSG, F24, F24FIL, F24_MSG, SC1,                           &
                                          WRT_BUG, WRT_ERR, WRT_LOG
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, ELDT_BUG_KE_BIT, ELDT_BUG_SE_BIT,                                           &
                                          ELDT_F23_KE_BIT, ELDT_F24_SE_BIT, ELDT_BUG_BCHK_BIT, ELDT_BUG_BMAT_BIT, ELDT_BUG_SHPJ_BIT,&
                                          FATAL_ERR, IBIT, LINKNO, LTERM_KGG, LTERM_KGGD, MBUG, MELDOF, NDOFG, NELE, NGRID,         &
                                          NTERM_KGG, NTERM_KGGD, NSUB, SOL_NAME
-      USE PARAMS, ONLY                :  EPSIL, SPARSTOR
+      USE PARAMS, ONLY                :  EPSIL
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
       USE SUBR_BEGEND_LEVELS, ONLY    :  ESP_BEGEND
       USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE MODEL_STUF, ONLY            :  BGRID, ELDT, ELDOF, ELGP, GRID, NUM_EMG_FATAL_ERRS, PLY_NUM, OELDT, KE, KED, TYPE
-      USE STF_ARRAYS, ONLY            :  STFKEY, STF3
+      USE STF_ARRAYS, ONLY            :  STF_ROW_HM, STF_COL_HM, STF_VAL_HM
       USE STF_TEMPLATE_ARRAYS, ONLY   :  CROW, TEMPLATE
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_COUNTER_ADD, HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN,                           &
                                          HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
+      USE MATRIX_ASSEMBLY_FFHASH, ONLY:  FFH_T
  
       USE ESP_USE_IFs
 
@@ -64,26 +66,17 @@
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'ESP'
       CHARACTER( 1*BYTE)              :: OPT(6)            ! Option flags for subr EMG (to tell it what to calc)
       CHARACTER(24*BYTE)              :: NAME              ! Name for output error purposes
-      CHARACTER(FILE_NAM_MAXLEN*BYTE) :: SCRFIL            ! File name
- 
       INTEGER(LONG), PARAMETER        :: DEB_NUM   = 46    ! Debug number for output error message
       INTEGER(LONG)                   :: EDOF(MELDOF)      ! A list of the G-set DOF's for an elem
       INTEGER(LONG)                   :: EDOF_ROW_NUM      ! Row number in array EDOF
       INTEGER(LONG)                   :: G_SET_COL_NUM     ! Col no. in array TDOF where G-set DOF's are kept 
       INTEGER(LONG)                   :: I,J,K             ! DO loop indices
       INTEGER(LONG)                   :: I1                ! Intermediate variable resulting from an IAND operation
-      INTEGER(LONG)                   :: IDUM              ! Dummy variable used when flipping DOF's
       INTEGER(LONG)                   :: IERROR            ! Local error indicator
       INTEGER(LONG)                   :: IGRID             ! Internal grid ID
-      INTEGER(LONG)                   :: IOCHK             ! IOSTAT error number when opening a file
-      INTEGER(LONG)                   :: IS                ! A pointer into arrays STFKEY and STFPNT
-      INTEGER(LONG)                   :: ISS               ! A particular value of IS
       INTEGER(LONG)                   :: KGG_ROW           ! A row no. in KGG or KGGD
       INTEGER(LONG)                   :: KGG_ROWJ          ! Another row no. in KGG or KGGD
       INTEGER(LONG)                   :: KGG_COL           ! A col no. in KGG or KGGD
-      INTEGER(LONG)                   :: KSTART            ! Used in deciding whether to process all elem stiffness terms or only
-!                                                            the ones on and above the diagonal (controlled by param SPARSTOR)
-      INTEGER(LONG)                   :: MAX_NUM           ! MAX of NTERM_KGG/NDOFG (used for DEBUG printout)
       INTEGER(LONG)                   :: NTERM             ! Either NTERM_KGGD (BUCKLING) or NTERM_KGG otherwise
       INTEGER(LONG)                   :: NUM_COMPS         ! 6 if GRID is a physical grid, 1 if a scalar point
       INTEGER(LONG)                   :: OUNT(2)           ! File units to write messages to.   
@@ -93,13 +86,16 @@
       INTEGER(LONG)                   :: TDOF_ROW_NUM      ! Row number in array TDOF
                                                            ! Indicator for output of elem data to BUG file
       INTEGER(LONG)                   :: LTERM             ! Either LTERM_KGGD (BUCKLING) or LTERM_KGG otherwise
+      INTEGER(LONG)                   :: ALLOC_TERMS
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = ESP_BEGEND
       INTEGER(LONG)                   :: HS_SLOT
+      TYPE(FFH_T)                     :: ENTRY_MAP
 
       REAL(DOUBLE)                    :: DQE(MELDOF,NSUB)  ! Dummy array in call to ELEM_TRANSFORM_LBG
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
       REAL(DOUBLE)                    :: HS_T0
       REAL(DOUBLE)                    :: HS_PHASE_T0
+      REAL(DOUBLE)                    :: TERM_VALUE
  
       INTRINSIC                       :: DABS
       INTRINSIC                       :: IAND
@@ -139,6 +135,15 @@
       ELSE
          LTERM = LTERM_KGG
       ENDIF
+      ALLOC_TERMS = MAX(1_LONG, LTERM)
+
+      IF (ALLOCATED(STF_ROW_HM)) DEALLOCATE ( STF_ROW_HM )
+      IF (ALLOCATED(STF_COL_HM)) DEALLOCATE ( STF_COL_HM )
+      IF (ALLOCATED(STF_VAL_HM)) DEALLOCATE ( STF_VAL_HM )
+      ALLOCATE ( STF_ROW_HM(ALLOC_TERMS), STF_COL_HM(ALLOC_TERMS), STF_VAL_HM(ALLOC_TERMS) )
+      STF_ROW_HM = 0
+      STF_COL_HM = 0
+      STF_VAL_HM = ZERO
 
       CALL TDOF_COL_NUM ( 'G ', G_SET_COL_NUM )
 
@@ -168,12 +173,6 @@
       ENDIF
 
 ! Process the elements:
- 
-      IS  = 0
-      ISS = IS
-      IF ((DEBUG(10) == 12) .OR. (DEBUG(10) == 13) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
-         CALL DUMPSTF ( '0', 0, 0, 0, 0, 0, 0 )
-      ENDIF
  
       IERROR = 0
 !xx   WRITE(SC1, * )                                       ! Advance 1 line for screen messages         
@@ -289,147 +288,33 @@ kgg_rows:DO J = 1,ELDOF
                WRITE(F06,*)
             ENDIF
 
-            IF (SPARSTOR == 'SYM') THEN                    ! Set KSTART depending on SPARSTOR
-               KSTART = J                                  ! Process only upper right portion of ME
-            ELSE
-               KSTART = 1                                  ! Process all of ME
-            ENDIF
-
-kgg_cols:   DO K = KSTART,ELDOF
+kgg_cols:   DO K = 1,ELDOF
                KGG_ROW  = KGG_ROWJ                         ! Make sure we have correct row num. It may have been flipped w/ col
                KGG_COL  = EDOF(K)
                IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
-                  IF (DABS(KED(J,K)) < EPS1) THEN
+                  TERM_VALUE = KED(J,K)
+                  IF (DABS(TERM_VALUE) < EPS1) THEN
                      CYCLE kgg_cols
                   ENDIF
                ELSE
-                  IF (DABS(KE(J,K)) < EPS1) THEN
+                  TERM_VALUE = KE(J,K)
+                  IF (DABS(TERM_VALUE) < EPS1) THEN
                      CYCLE kgg_cols
                   ENDIF
                ENDIF
  
-               IF (SPARSTOR == 'SYM') THEN                 ! If 'SYM', Flip KGG_COL,KGG_ROW if KGG_COL < KGG_ROW
-                  IF (KGG_COL < KGG_ROW) THEN
-                     IDUM    = KGG_ROW
-                     KGG_ROW = KGG_COL
-                     KGG_COL = IDUM
-                  ENDIF
-               ENDIF
-
-               IS = STFKEY(KGG_ROW)                        ! Get pointer to first term in row KGG_ROW of global stiff matrix
-
-               IF (IS == 0) THEN                           ! STFKEY(KGG_ROW)=0 means no current terms in global stiff matrix at row
-                                                           ! KGG_ROW so update NTERM & reset STF arrays
-                  NTERM = NTERM + 1
-
-                  IF ((DEBUG(10) == 13) .OR. (DEBUG(10) == 33)) THEN
-                     IF (ALLOCATED(TEMPLATE)) THEN
-                        TEMPLATE(KGG_ROW,KGG_COL) = .TRUE.
-                     ELSE
-                        NAME = 'TEMPLATE                '
-                        WRITE(ERR,1628) SUBR_NAME,DEB_NUM,NAME
-                        WRITE(F06,1628) SUBR_NAME,DEB_NUM,NAME
-                        FATAL_ERR = FATAL_ERR + 1
-                        CALL OUTA_HERE ( 'Y' )             ! Coding error (TEMPLATE should be allocated), so quit
-                     ENDIF
-                  ENDIF
-
-                  IF (NTERM > LTERM) THEN
-                     WRITE(ERR,1624) SUBR_NAME, 'STIFFNESS','LTERM', LTERM
-                     WRITE(F06,1624) SUBR_NAME, 'STIFFNESS','LTERM', LTERM
-                     FATAL_ERR = FATAL_ERR + 1
-                     CALL OUTA_HERE ( 'Y' )                ! MYSTRAN limitation, so quit
-                  ENDIF
-
-                  STFKEY(KGG_ROW)   = NTERM
-                  STF3(NTERM)%Col_1 = KGG_COL
-                  STF3(NTERM)%Col_2 = 0
-                  IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
-                     STF3(NTERM)%Col_3 = KED(J,K)
+               IF ((DEBUG(10) == 13) .OR. (DEBUG(10) == 33)) THEN
+                  IF (ALLOCATED(TEMPLATE)) THEN
+                     TEMPLATE(KGG_ROW,KGG_COL) = .TRUE.
                   ELSE
-                     STF3(NTERM)%Col_3 = KE(J,K)
+                     NAME = 'TEMPLATE                '
+                     WRITE(ERR,1628) SUBR_NAME,DEB_NUM,NAME
+                     WRITE(F06,1628) SUBR_NAME,DEB_NUM,NAME
+                     FATAL_ERR = FATAL_ERR + 1
+                     CALL OUTA_HERE ( 'Y' )
                   ENDIF
-
-                  IF ((DEBUG(10) == 12) .OR. (DEBUG(10) == 13) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
-                     CALL DUMPSTF ( 'A', J, K, KGG_ROW, KGG_COL, IS, ISS )
-                  ENDIF
- 
-               ELSE                                        ! STFKEY(KGG_ROW) /= 0 means there are already some terms in row KGG_ROW
-
-stfpnt0:          DO                                       ! so, run this loop until we find a place to put stiff(J,K). If there is
-                                                           ! already a term in this row w/ same DOF's as stiff(J,K), loop runs once.
-                                                           ! If not, then this loop runs until it finds STFPNT=0, and inserts term.
- 
-                     IF (KGG_COL == STF3(IS)%Col_1) THEN   ! There is a term that exists with same DOF'S as stiff(J,K) so add terms 
-                        CALL HOTSPOT_COUNTER_ADD ( 'KGG_DUPLICATE_INSERTS', INT(1,DBL_LONG) )
-
-                        IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
-                           STF3(IS)%Col_3 = STF3(IS)%Col_3 + KED(J,K)
-                        ELSE
-                           STF3(IS)%Col_3 = STF3(IS)%Col_3 + KE(J,K)
-                        ENDIF
-                        IF ((DEBUG(10) == 13) .OR. (DEBUG(10) == 33)) THEN
-                           IF (ALLOCATED(TEMPLATE)) THEN
-                              TEMPLATE(KGG_ROW,KGG_COL) = .TRUE.
-                           ELSE
-                              NAME = 'TEMPLATE                '
-                              WRITE(ERR,1628) SUBR_NAME,DEB_NUM,NAME
-                              WRITE(F06,1628) SUBR_NAME,DEB_NUM,NAME
-                              FATAL_ERR = FATAL_ERR + 1
-                              CALL OUTA_HERE ( 'Y' )       ! Coding error (TEMPLATE should be allocated), so quit
-                           ENDIF
-                        ENDIF
-                        IF ((DEBUG(10) == 12) .OR. (DEBUG(10) == 13) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
-                           CALL DUMPSTF ( 'B', J, K, KGG_ROW, KGG_COL, IS, ISS )
-                        ENDIF
-
-                        CYCLE kgg_cols                     ! We have added a term to STF so exit this loop and go to next col of KGG
- 
-                     ELSE                                  ! This is a new term for row J. Need to cycle until we find STFPNT = 0.
-                                                           ! Then we can put KE(J,K), or KED(J,K) in STF
-                        ISS = IS
-                        IS  = STF3(IS)%Col_2
-                        IF (IS == 0) THEN                  ! We are at end of where terms are in this row, so stiff(J,K) goes here 
-                           IF ((DEBUG(10) == 13) .OR. (DEBUG(10) == 33)) THEN
-                              IF (ALLOCATED(TEMPLATE)) THEN
-                                 TEMPLATE(KGG_ROW,KGG_COL) = .TRUE.
-                              ELSE
-                                 NAME = 'TEMPLATE                '
-                                 WRITE(ERR,1628) SUBR_NAME,DEB_NUM,NAME
-                                 WRITE(F06,1628) SUBR_NAME,DEB_NUM,NAME
-                                 FATAL_ERR = FATAL_ERR + 1
-                                 CALL OUTA_HERE ( 'Y' )    ! Coding error (TEMPLATE should be allocated), so quit
-                              ENDIF
-                           ENDIF
-                           IF (NTERM+1 > LTERM) THEN
-                              WRITE(ERR,1624) SUBR_NAME, 'STIFFNESS','LTERM', LTERM
-                              WRITE(F06,1624) SUBR_NAME, 'STIFFNESS','LTERM', LTERM
-                              FATAL_ERR = FATAL_ERR + 1
-                              CALL OUTA_HERE ( 'Y' )       ! MYSTRAN limitation, so quit
-                           ENDIF
-                           NTERM = NTERM+1                 ! Increment NTERM
-                           STF3(ISS)%Col_2   = NTERM       ! STFPNT for the current stiff(J,K) term
-                           STF3(NTERM)%Col_2 = 0           ! Latest STFPNT is set to 0 so we will know when to insert next term
-                           STF3(NTERM)%Col_1 = KGG_COL     ! STFCOL always is KGG_COL
-                           IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
-                              STF3(NTERM)%Col_3 = KED(J,K)
-                           ELSE
-                              STF3(NTERM)%Col_3 = KE(J,K)
-                           ENDIF
-                           IF ((DEBUG(10) == 12) .OR. (DEBUG(10) == 13) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
-                              CALL DUMPSTF ( 'C', J, K, KGG_ROW, KGG_COL, IS, ISS )
-                           ENDIF
-
-                           CYCLE kgg_cols                  ! We put stiff(J,K) into STF so exit this loop and go to next col of KGG 
-                        ELSE                               ! STFPNT /= 0 so cycle this loop until we get it = 0
-                           CYCLE stfpnt0
-                        ENDIF
- 
-                     ENDIF
-
-                  ENDDO stfpnt0 
- 
                ENDIF
+               CALL ADD_HASH_STIFF_TERM ( KGG_ROW, KGG_COL, TERM_VALUE )
  
             ENDDO kgg_cols 
 
@@ -501,38 +386,6 @@ stfpnt0:          DO                                       ! so, run this loop u
          CALL DEALLOCATE_TEMPLATE
       ENDIF 
 
-! Open a scratch file that will be used to write array STF3 so that we can deallocate them and then reallocate them with the exact
-! amount of memory they need (so we do have wasted memory going into subr SPARSE_KGG)
-  
-      SCRFIL(1:)  = ' '
-      SCRFIL(1:9) = 'SCRATCH-991'
-      OPEN (SCR(1),STATUS='SCRATCH',POSITION='REWIND',FORM='UNFORMATTED',ACTION='READWRITE',IOSTAT=IOCHK)
-      IF (IOCHK /= 0) THEN
-         CALL OPNERR ( IOCHK, SCRFIL, OUNT, 'Y' )
-         CALL FILE_CLOSE ( SCR(1), SCRFIL, 'DELETE', 'Y' )
-         CALL OUTA_HERE ( 'Y' )
-      ENDIF
-      REWIND (SCR(1))
-
-      DO I=1,NTERM
-         WRITE(SCR(1)) STF3(I)
-      ENDDO
-      CALL DEALLOCATE_STF_ARRAYS ( 'STF3' )
-
-      CALL ALLOCATE_STF_ARRAYS ( 'STF3', SUBR_NAME )
-
-      REWIND (SCR(1))
-      DO I=1,NTERM
-         READ(SCR(1),IOSTAT=IOCHK) STF3(I)
-         IF (IOCHK /= 0) THEN
-            REC_NO = J
-            CALL READERR ( IOCHK, SCRFIL, 'SCR FILE WITH STF3', REC_NO, OUNT, 'Y' )
-            CALL FILE_CLOSE ( SCR(1), SCRFIL, 'DELETE', 'Y' )
-            CALL OUTA_HERE ( 'Y' )                         ! Error reading scratch file, so quit
-         ENDIF
-      ENDDO
-      CALL FILE_CLOSE (SCR(1), SCRFIL, 'DELETE', 'Y' )
-
 ! Reset LTERM and NTERM to appropriate values
 
       IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
@@ -543,6 +396,8 @@ stfpnt0:          DO                                       ! so, run this loop u
          LTERM_KGG  = NTERM_KGG                            ! reset LTERM now that we have det. actual number of terms in KGG
       ENDIF
 
+      CALL ENTRY_MAP%RESET()
+
 
 ! **********************************************************************************************************************************
 ! Debug output:
@@ -550,21 +405,8 @@ stfpnt0:          DO                                       ! so, run this loop u
       IF((DEBUG(10) == 11) .OR. (DEBUG(10) == 12) .OR. (DEBUG(10) == 13) .OR.                                                     &
          (DEBUG(10) == 31) .OR. (DEBUG(10) == 32) .OR. (DEBUG(10) == 33)) THEN
          WRITE(F06,1260)
-         MAX_NUM = MAX(NTERM,NDOFG) 
-         DO I=1,MAX_NUM
-            IF      (MAX_NUM == NTERM) THEN
-               IF (NDOFG >= I) THEN
-                  WRITE(F06,1261) I,STFKEY(I),STF3(I)
-               ELSE
-                  WRITE(F06,1262) I, STF3(I)
-               ENDIF
-            ELSE IF (MAX_NUM == NDOFG) THEN
-               IF (NTERM >= I) THEN
-                  WRITE(F06,1261) I,STFKEY(I),STF3(I)
-               ELSE
-                  WRITE(F06,1263) I,STFKEY(I)
-               ENDIF
-            ENDIF
+         DO I=1,NTERM
+            WRITE(F06,1261) I,STF_ROW_HM(I),STF_COL_HM(I),STF_VAL_HM(I)
          ENDDO 
          WRITE(F06,*)
       ENDIF
@@ -581,13 +423,9 @@ stfpnt0:          DO                                       ! so, run this loop u
       RETURN
 
 ! **********************************************************************************************************************************
- 1260 FORMAT(/,'            I   STFKEY(I)   STFCOL(I)   STFPNT(I)           STF(I)')      
+ 1260 FORMAT(/,'            I   STF_ROW_HM   STF_COL_HM        STF_VAL_HM')
 
- 1261 FORMAT(1X,I12,I12,I12,I12,3X,1ES21.14)
-
- 1262 FORMAT(1X,I12,12X,I12,I12,3X,1ES21.14)
-
- 1263 FORMAT(1X,I12,I12)
+ 1261 FORMAT(1X,I12,I12,I12,3X,1ES21.14)
 
  1624 FORMAT(' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,' TOO MANY NON-ZERO TERMS IN THE ',A,' MATRIX. LIMIT IS ',A,'    = ',I12)
@@ -620,67 +458,61 @@ stfpnt0:          DO                                       ! so, run this loop u
  
 ! ##################################################################################################################################
 
-      SUBROUTINE DUMPSTF ( WHAT, J, K, KGG_ROW, KGG_COL, IS, ISS )
+      SUBROUTINE ADD_HASH_STIFF_TERM ( ROW_NUM, COL_NUM, VALUE )
 
-! Prints out info on the formulation of stiffness arrays for subr ESP, which generates the arrays
+      INTEGER(LONG), INTENT(IN)       :: ROW_NUM
+      INTEGER(LONG), INTENT(IN)       :: COL_NUM
+      REAL(DOUBLE) , INTENT(IN)       :: VALUE
 
-      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
-      USE IOUNT1, ONLY                :  WRT_BUG, WRT_ERR, WRT_LOG, ERR, F04, F06
-      USE MODEL_STUF, ONLY            :  EID
-      USE STF_ARRAYS, ONLY            :  STF3
+      INTEGER(LONG)                   :: IDX
+      INTEGER(INT64)                  :: KEY
 
-      IMPLICIT NONE
+      KEY = PACK_MATRIX_KEY(ROW_NUM, COL_NUM)
+      IDX = ENTRY_MAP%GET_INDEX(KEY)
 
-      CHARACTER(1*BYTE), INTENT(IN)   :: WHAT              ! Indicator of where this subr was called from in subr ESP
-
-      INTEGER(LONG)                   :: IS                ! A pointer into arrays STFKEY and STFPNT
-      INTEGER(LONG)                   :: ISS               ! A particular value of IS
-      INTEGER(LONG)    , INTENT(IN)   :: J                 ! Row number of elem stiff matrix term, KE(J,K), or KED(J,K)
-      INTEGER(LONG)    , INTENT(IN)   :: K                 ! Col number of elem stiff matrix term, KE(J,K), or KED(J,K)
-      INTEGER(LONG)    , INTENT(IN)   :: KGG_COL           ! Row number of KGG matrix where KE(J,K), or KED(J,K), goes 
-      INTEGER(LONG)    , INTENT(IN)   :: KGG_ROW           ! Col number of KGG matrix where KE(J,K), or KED(J,K), goes 
-
-! **********************************************************************************************************************************
-      IF      (WHAT == '0') THEN
-
-         WRITE(F06,8910)
-
-      ELSE IF (WHAT == 'A') THEN
-
-         WRITE(F06,8930) EID,J,K,KGG_ROW,KGG_COL,STFKEY(KGG_ROW),NTERM,STF3(NTERM)%Col_1,STF3(NTERM)%Col_2,                        &
-                         STF3(NTERM)%Col_3,IS,ISS
-
-      ELSE IF (WHAT == 'B') THEN
-
-         WRITE(F06,8940) EID,J,K,KGG_ROW,KGG_COL,STFKEY(KGG_ROW),NTERM,STF3(NTERM)%Col_1,STF3(NTERM)%Col_2,                        &
-                         STF3(NTERM)%Col_3,IS ,ISS,STF3(ISS)%Col_2,STF3(IS)%Col_3
-
-      ELSE IF (WHAT == 'C') THEN
-
-         WRITE(F06,8950) EID,J,K,KGG_ROW,KGG_COL,STFKEY(KGG_ROW),NTERM,STF3(NTERM)%Col_1,STF3(NTERM)%Col_2,                        &
-                         STF3(NTERM)%Col_3,IS,ISS
-
+      IF (IDX >= 0) THEN
+         CALL HOTSPOT_COUNTER_ADD ( 'KGG_DUPLICATE_INSERTS', INT(1,DBL_LONG) )
+         STF_VAL_HM(ENTRY_MAP%VALS(IDX)) = STF_VAL_HM(ENTRY_MAP%VALS(IDX)) + VALUE
+      ELSE
+         NTERM = NTERM + 1
+         IF (NTERM > LTERM) THEN
+            WRITE(ERR,'(A,A,/,A,A,A,I12)')                                                                                           &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+                  '              TOO MANY NON-ZERO TERMS IN THE ', 'STIFFNESS', ' MATRIX. LIMIT IS LTERM = ', LTERM
+            WRITE(F06,'(A,A,/,A,A,A,I12)')                                                                                           &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+                  '              TOO MANY NON-ZERO TERMS IN THE ', 'STIFFNESS', ' MATRIX. LIMIT IS LTERM = ', LTERM
+            FATAL_ERR = FATAL_ERR + 1
+            CALL OUTA_HERE ( 'Y' )
+         ENDIF
+         STF_ROW_HM(NTERM) = ROW_NUM
+         STF_COL_HM(NTERM) = COL_NUM
+         STF_VAL_HM(NTERM) = VALUE
+         CALL ENTRY_MAP%STORE_VALUE ( KEY, NTERM, IDX )
+         IF (IDX < 0) THEN
+            WRITE(ERR,'(A,A,/,A,A,A,I12)')                                                                                           &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+                  '              TOO MANY NON-ZERO TERMS IN THE ', 'STIFFNESS', ' MATRIX. LIMIT IS HASH IDX = ', IDX
+            WRITE(F06,'(A,A,/,A,A,A,I12)')                                                                                           &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+                  '              TOO MANY NON-ZERO TERMS IN THE ', 'STIFFNESS', ' MATRIX. LIMIT IS HASH IDX = ', IDX
+            FATAL_ERR = FATAL_ERR + 1
+            CALL OUTA_HERE ( 'Y' )
+         ENDIF
       ENDIF
 
-      RETURN
-
-! **********************************************************************************************************************************
- 8910 FORMAT(4X,'ELEM       J       K KGG_ROW KGG_COL  STFKEY  NKTERM  STFCOL  STFPNT      STF         IS     ISS  STFPNT     STF'&
-          ,/,4X,' ID                                 (KGG_ROW)       (NKTERM) (NKTERM)   (NKTERM)                   (ISS)     (IS)')
-
- 8920 FORMAT(1X,'---------------------------------------------------------------------------------------------------------------', &
-'--------')
-
- 8930 FORMAT(1X,'A',I6,I8,I8,I8,I8,I8,I8,I8,I8,1ES12.3,I8,I8)
-
- 8940 FORMAT(1X,'B',I6,I8,I8,I8,I8,I8,I8,I8,I8,1ES12.3,I8,I8,I8,1ES12.3)
-
- 8950 FORMAT(1X,'C',I6,I8,I8,I8,I8,I8,I8,I8,I8,1ES12.3,I8,I8)
-
-! **********************************************************************************************************************************
-      END SUBROUTINE DUMPSTF
+      END SUBROUTINE ADD_HASH_STIFF_TERM
 
 ! ##################################################################################################################################
+
+      PURE INTEGER(INT64) FUNCTION PACK_MATRIX_KEY ( ROW_NUM, COL_NUM )
+
+      INTEGER(LONG), INTENT(IN)       :: ROW_NUM
+      INTEGER(LONG), INTENT(IN)       :: COL_NUM
+
+      PACK_MATRIX_KEY = IOR( SHIFTL(INT(ROW_NUM,INT64), 32), INT(COL_NUM,INT64) )
+
+      END FUNCTION PACK_MATRIX_KEY
 
       SUBROUTINE WRITE_NEG_DIAG_STIFFNESS ( WHAT )
 

@@ -39,10 +39,13 @@
 
       TYPE(INT2_REAL1), ALLOCATABLE   :: STF3(:)
 
+      INTEGER(LONG), ALLOCATABLE      :: STF_ROW_HM(:)      ! Hash-backed row numbers for unique KGG/KGGD entries
+      INTEGER(LONG), ALLOCATABLE      :: STF_COL_HM(:)      ! Hash-backed col numbers for unique KGG/KGGD entries
       INTEGER(LONG), ALLOCATABLE      :: STFCOL(:)         ! See explanation below
       INTEGER(LONG), ALLOCATABLE      :: STFPNT(:)         ! See explanation below
       INTEGER(LONG), ALLOCATABLE      :: STFKEY(:)         ! See explanation below
  
+      REAL(DOUBLE) , ALLOCATABLE      :: STF_VAL_HM(:)      ! Hash-backed values for unique KGG/KGGD entries
       REAL(DOUBLE) , ALLOCATABLE      :: STF(:)            ! See explanation below
   
 

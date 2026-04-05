@@ -42,7 +42,7 @@
       USE SUBR_BEGEND_LEVELS, ONLY    :  EMP_BEGEND
       USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START
       USE MODEL_STUF, ONLY            :  AGRID, ELDT, ELDOF, ELGP, GRID_ID, NUM_EMG_FATAL_ERRS, ME, OELDT, PLY_NUM, TYPE
-      USE EMS_ARRAYS, ONLY            :  EMS, EMSCOL, EMSKEY, EMSPNT
+      USE EMS_ARRAYS, ONLY            :  EMS_ROW_HM, EMS_COL_HM, EMS_VAL_HM
  
       IMPLICIT NONE
  
@@ -50,7 +50,6 @@
  
       INTEGER(LONG)                   :: IDUM              ! Dummy variable used when flipping DOF's
       INTEGER(LONG)                   :: KSTART            ! Used in deciding whether to process all elem mass terms or only
-      INTEGER(LONG)                   :: MAX_NUM           ! MAX of NTERM_MGGE/NDOFG (used for DEBUG printout)
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = EMP_BEGEND
  
       END SUBROUTINE EMP
@@ -58,4 +57,3 @@
    END INTERFACE
 
    END MODULE EMP_Interface
-

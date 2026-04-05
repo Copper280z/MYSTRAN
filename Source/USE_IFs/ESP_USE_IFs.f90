@@ -37,11 +37,6 @@
       USE ELEM_TRANSFORM_LBG_Interface
       USE OUTA_HERE_Interface
       USE DEALLOCATE_TEMPLATE_Interface
-      USE OPNERR_Interface
-      USE FILE_CLOSE_Interface
-      USE DEALLOCATE_STF_ARRAYS_Interface
-      USE ALLOCATE_STF_ARRAYS_Interface
-      USE READERR_Interface
       USE COUNTER_INIT_Interface
       USE COUNTER_PROGRESS_Interface
 

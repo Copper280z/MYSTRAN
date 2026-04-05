@@ -42,7 +42,7 @@
       USE DOF_TABLES,ONLY             :  TDOF_ROW_START
       USE MODEL_STUF, ONLY            :  GRID_ID
       USE PARAMS, ONLY                :  EPSIL, PRTMASS, SUPINFO, WTMASS
-      USE EMS_ARRAYS, ONLY            :  EMS, EMSCOL, EMSKEY, EMSPNT
+      USE EMS_ARRAYS, ONLY            :  EMS_ROW_HM, EMS_COL_HM, EMS_VAL_HM
       USE SPARSE_MATRICES, ONLY       :  I2_MGG, I_MGG, J_MGG, MGG, I_MGGC, J_MGGC, MGGC, I_MGGE, J_MGGE, MGGE,                    &
                                          I_MGGS, J_MGGS, MGGS,  SYM_MGGC, SYM_MGGE, SYM_MGGS
       USE SCRATCH_MATRICES, ONLY      :  I_CRS1, J_CRS1, CRS1 
@@ -58,4 +58,3 @@
    END INTERFACE
 
    END MODULE SPARSE_MGG_Interface
-

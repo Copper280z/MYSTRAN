@@ -37,10 +37,13 @@
   
       SAVE
 
+      INTEGER(LONG), ALLOCATABLE      :: EMS_ROW_HM(:)     ! Hash-backed row numbers for unique MGGE entries
+      INTEGER(LONG), ALLOCATABLE      :: EMS_COL_HM(:)     ! Hash-backed col numbers for unique MGGE entries
       INTEGER(LONG), ALLOCATABLE      :: EMSCOL(:)         ! See explanation below
       INTEGER(LONG), ALLOCATABLE      :: EMSPNT(:)         ! See explanation below
       INTEGER(LONG), ALLOCATABLE      :: EMSKEY(:)         ! See explanation below
  
+      REAL(DOUBLE) , ALLOCATABLE      :: EMS_VAL_HM(:)     ! Hash-backed values for unique MGGE entries
       REAL(DOUBLE) , ALLOCATABLE      :: EMS(:)            ! See explanation below
   
 

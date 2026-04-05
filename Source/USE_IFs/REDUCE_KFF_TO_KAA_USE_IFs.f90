@@ -32,6 +32,7 @@
       USE ALLOCATE_SPARSE_MAT_Interface
       USE PARTITION_SS_Interface
       USE SYM_MAT_DECOMP_LAPACK_Interface
+      USE SYM_MAT_DECOMP_CHOLMOD_Interface
       USE SYM_MAT_DECOMP_SUPRLU_Interface
       USE OUTA_HERE_Interface
       USE SOLVE_GOA_Interface

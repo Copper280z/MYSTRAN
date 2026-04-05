@@ -38,7 +38,7 @@
       USE TIMDAT, ONLY                :  TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  SOLVE_GOA_BEGEND
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
-      USE PARAMS, ONLY                :  SOLLIB, SPARSE_FLAVOR
+      USE PARAMS, ONLY                :  SOLLIB
       USE SPARSE_MATRICES, ONLY       :  I2_GOA, I_GOA, J_GOA, GOA, I_KOO, J_KOO, KOO, I_KAO, J_KAO, KAO
      USE LAPACK_LIN_EQN_DPB
 
@@ -142,20 +142,9 @@
                CALL FBS_LAPACK ( 'N', NDOFO, KOO_SDIA, KOO_SCALE_FACS, INOUT_COL )
 
             ELSE IF (SOLLIB == 'SPARSE  ') THEN
-         
-               IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
 
-                  INFO = 0
-                  CALL FBS_SUPRLU ( SUBR_NAME, 'KOO', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, J, INOUT_COL, INFO )
-
-               ELSE
-
-                  FATAL_ERR = FATAL_ERR + 1
-                  WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-                  WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-                  CALL OUTA_HERE ( 'Y' )
-
-               ENDIF
+               INFO = 0
+               CALL FBS_CHOLMOD ( SUBR_NAME, 'KOO', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, J, INOUT_COL, INFO )
 
             ELSE
 

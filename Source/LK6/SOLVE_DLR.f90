@@ -35,7 +35,7 @@
       USE IOUNT1, ONLY                :  FILE_NAM_MAXLEN, WRT_ERR, WRT_LOG, ERR, F04, F06, SCR
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FACTORED_MATRIX, FATAL_ERR, KLL_SDIA, NDOFR, NDOFL, NTERM_DLR, NTERM_KLL,   &
                                          NTERM_KRL
-      USE PARAMS, ONLY                :  EPSIL, PRTDLR, SOLLIB, SPARSE_FLAVOR, SPARSTOR
+      USE PARAMS, ONLY                :  EPSIL, PRTDLR, SOLLIB, SPARSTOR
       USE TIMDAT, ONLY                :  HOUR, MINUTE, SEC, SFRAC, TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  SOLVE_DLR_BEGEND
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
@@ -110,19 +110,8 @@
 
       ELSE IF (SOLLIB == 'SPARSE  ') THEN
 
-         IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
-
-            INFO = 0
-            CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KLL', 'L ', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, INFO )
-
-         ELSE
-
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-            WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-            CALL OUTA_HERE ( 'Y' )
-
-         ENDIF
+         INFO = 0
+         CALL SYM_MAT_DECOMP_CHOLMOD ( SUBR_NAME, 'KLL', 'L ', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, INFO )
 
       ELSE
 
@@ -185,19 +174,8 @@
 
             ELSE IF (SOLLIB == 'SPARSE  ') THEN
 
-               IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
-
-                  INFO = 0
-                  CALL FBS_SUPRLU ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, J, INOUT_COL, INFO )
-
-               ELSE
-
-                  FATAL_ERR = FATAL_ERR + 1
-                  WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-                  WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-                  CALL OUTA_HERE ( 'Y' )
-
-               ENDIF
+               INFO = 0
+               CALL FBS_CHOLMOD ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, J, INOUT_COL, INFO )
 
             ELSE
 

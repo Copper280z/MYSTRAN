@@ -37,7 +37,7 @@
       USE IOUNT1, ONLY                :  ERR, F04, F06, L2E, LINK2E, L2E_MSG, SC1, WRT_LOG
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, KOO_SDIA, NDOFF, NDOFA, NDOFO, NTERM_KFF,       &
                                          NTERM_KAA, NTERM_KAO, NTERM_KOO, NTERM_GOA
-      USE PARAMS, ONLY                :  KOORAT, MATSPARS, SOLLIB, SPARSTOR, SPARSE_FLAVOR, RCONDK
+      USE PARAMS, ONLY                :  KOORAT, MATSPARS, SOLLIB, SPARSTOR, RCONDK
       USE TIMDAT, ONLY                :  TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  REDUCE_KFF_TO_KAA_BEGEND
       USE CONSTANTS_1, ONLY           :  ONE 
@@ -166,20 +166,9 @@
             CALL SYM_MAT_DECOMP_LAPACK ( SUBR_NAME, 'KOO', 'O ', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, 'Y', KOORAT, EQUIL_KOO,      &
                                          RCONDK, DEB_PRT, EQUED, KOO_SDIA, K_INORM, RCOND, KOO_SCALE_FACS, INFO )
          ELSE IF (SOLLIB == 'SPARSE  ') THEN
-         
-            IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
 
-               INFO = 0
-               CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KOO', 'O ', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, INFO )
-
-            ELSE
-
-               FATAL_ERR = FATAL_ERR + 1
-               WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-               WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-               CALL OUTA_HERE ( 'Y' )
-
-            ENDIF
+            INFO = 0
+            CALL SYM_MAT_DECOMP_CHOLMOD ( SUBR_NAME, 'KOO', 'O ', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, INFO )
 
 
          ELSE

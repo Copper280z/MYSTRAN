@@ -33,7 +33,9 @@
       USE OUTA_HERE_Interface
       USE GET_SPARSE_CRS_COL_Interface
       USE FBS_LAPACK_Interface
+      USE FBS_CHOLMOD_Interface
       USE FBS_SUPRLU_Interface
+      USE FREE_CHOLMOD_Interface
       USE deallocate_sparse_mat_Interface
       USE ALLOCATE_SPARSE_MAT_Interface
       USE ALLOCATE_L6_2_Interface

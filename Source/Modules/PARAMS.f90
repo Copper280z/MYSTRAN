@@ -439,11 +439,10 @@
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       CHARACTER(  8*BYTE)      :: SOLLIB         = 'SPARSE  '! If 'BANDED  ', use LAPACK and ARPACK for eqn soln and eigens.
-!                                                              If 'SPARSE  ', use value determined by parameter SPARSE_FLAVOR
-!                                                              defined in field 4 of the PARAM, SOLLIB entry
+!                                                              If 'SPARSE  ', safe SPD solves use CHOLMOD directly.
+!                                                              Other sparse solve paths use value determined by SPARSE_FLAVOR.
 
-      CHARACTER(  8*BYTE)      :: SPARSE_FLAVOR  = 'SUPERLU '! This denotes which SPARSE SOLLIB to use. Currently SuperLU is the
-!                                                              only option
+      CHARACTER(  8*BYTE)      :: SPARSE_FLAVOR  = 'SUPERLU '! Sparse backend selector for non-SPD/general sparse solve paths.
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: SORT_MAX       =     5     ! Max number of times to run sort algorithm before stopping with error.

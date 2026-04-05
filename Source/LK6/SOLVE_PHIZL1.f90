@@ -37,7 +37,7 @@
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FACTORED_MATRIX, FATAL_ERR, KLL_SDIA, NDOFR, NDOFL, NTERM_DLR,              &
                                          NTERM_PHIZL1, NTERM_KLL, NTERM_KLLs
       USE TIMDAT, ONLY                :  HOUR, MINUTE, SEC, SFRAC, TSEC
-      USE PARAMS, ONLY                :  EPSIL, SOLLIB, SPARSE_FLAVOR, SPARSTOR
+      USE PARAMS, ONLY                :  EPSIL, SOLLIB, SPARSTOR
       USE SUBR_BEGEND_LEVELS, ONLY    :  SOLVE_PHIZL1_BEGEND
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE SCRATCH_MATRICES, ONLY      :  I_CRS3, J_CRS3, CRS3
@@ -140,18 +140,8 @@
 
             ELSE IF (SOLLIB == 'SPARSE  ') THEN
 
-               IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
-
-                  INFO = 0
-                  CALL FBS_SUPRLU ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, J, INOUT_COL, INFO )
-               ELSE
-
-                  FATAL_ERR = FATAL_ERR + 1
-                  WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-                  WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-                  CALL OUTA_HERE ( 'Y' )
-
-               ENDIF
+               INFO = 0
+               CALL FBS_CHOLMOD ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, J, INOUT_COL, INFO )
 
             ELSE
 
@@ -176,6 +166,11 @@
       ENDDO
   
       call deallocate_sparse_mat ( 'KLLs' )
+
+      IF (SOLLIB == 'SPARSE  ') THEN
+         INFO = 0
+         CALL FREE_CHOLMOD ( SUBR_NAME, 'KLL', INFO )
+      ENDIF
 
 ! The PHIZL1 data in SCRATCH-991 is written one col at a time for PHIZL1. Therefore it is rows of PHIZL1t
 

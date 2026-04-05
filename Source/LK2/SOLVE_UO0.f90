@@ -34,7 +34,7 @@
       USE TIMDAT, ONLY                :  TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  SOLVE_UO0_BEGEND
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
-      USE PARAMS, ONLY                :  PRTUO0, SOLLIB, SPARSE_FLAVOR
+      USE PARAMS, ONLY                :  PRTUO0, SOLLIB
       USE SPARSE_MATRICES, ONLY       :  I_PO, J_PO, PO, I_KOO, J_KOO, KOO
       USE COL_VECS, ONLY              :  UO0_COL
       USE LAPACK_LIN_EQN_DPB
@@ -115,19 +115,8 @@
 
             ELSE IF (SOLLIB == 'SPARSE  ') THEN
 
-               IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
-
-                  INFO = 0
-                  CALL FBS_SUPRLU ( SUBR_NAME, 'KOO', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, J, INOUT_COL, INFO )
-
-               ELSE
-
-                  FATAL_ERR = FATAL_ERR + 1
-                  WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-                  WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-                  CALL OUTA_HERE ( 'Y' )
-
-               ENDIF
+               INFO = 0
+               CALL FBS_CHOLMOD ( SUBR_NAME, 'KOO', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, J, INOUT_COL, INFO )
 
 
            ELSE

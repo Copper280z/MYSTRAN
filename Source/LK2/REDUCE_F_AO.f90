@@ -36,7 +36,7 @@
                                          NTERM_KFFD, NTERM_KAAD, NTERM_KAOD, NTERM_KOOD,                                           &
                                          NTERM_MFF , NTERM_MAA , NTERM_MAO , NTERM_MOO ,                                           &
                                          NTERM_PF  , NTERM_PA  , NTERM_PO  , NTERM_GOA
-      USE PARAMS, ONLY                :  EQCHK_OUTPUT, MATSPARS, PRTSTIFD, PRTSTIFF, PRTMASS, PRTFOR, SOLLIB, SPARSE_FLAVOR
+      USE PARAMS, ONLY                :  EQCHK_OUTPUT, MATSPARS, PRTSTIFD, PRTSTIFF, PRTMASS, PRTFOR, SOLLIB
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE TIMDAT, ONLY                :  HOUR, MINUTE, SEC, SFRAC, TSEC
       USE DOF_TABLES, ONLY            :  TDOFI
@@ -154,23 +154,10 @@
 
             ENDIF
 
-FreeS:      IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the storage allocated inside SuperLU
+FreeS:      IF (SOLLIB == 'SPARSE  ') THEN
 
-               IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
-
-                  DO J=1,NDOFO
-                     DUM_COL(J) = ZERO
-                  ENDDO
-
-                  CALL C_FORTRAN_DGSSV( 3, NDOFO, NTERM_KOO, 1, KOO , I_KOO , J_KOO , DUM_COL, NDOFO, SLU_FACTORS, SLU_INFO )
-
-                  IF (SLU_INFO .EQ. 0) THEN
-                     WRITE (*,*) 'SUPERLU STORAGE FREED'
-                  ELSE
-                     WRITE(*,*) 'SUPERLU STORAGE NOT FREED. INFO FROM SUPERLU FREE STORAGE ROUTINE = ', SLU_INFO
-                  ENDIF
-
-               ENDIF
+               SLU_INFO = 0
+               CALL FREE_CHOLMOD ( SUBR_NAME, 'KOO', SLU_INFO )
 
             ENDIF FreeS
  

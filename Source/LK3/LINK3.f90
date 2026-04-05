@@ -40,7 +40,7 @@
                                          NTERM_KLL, NTERM_PL, RESTART,  SOL_NAME, WARN_ERR
       USE TIMDAT, ONLY                :  HOUR, MINUTE, SEC, SFRAC       
       USE CONSTANTS_1, ONLY           :  ZERO, ONE, TWO, TEN
-      USE PARAMS, ONLY                :  CRS_CCS, EPSERR, EPSIL, KLLRAT, RELINK3, RCONDK, SOLLIB, SUPWARN, SPARSE_FLAVOR
+      USE PARAMS, ONLY                :  CRS_CCS, EPSERR, EPSIL, KLLRAT, RELINK3, RCONDK, SOLLIB, SUPWARN
       USE SPARSE_MATRICES, ONLY       :  I_KLL, J_KLL, KLL, I_PL, J_PL, PL
       USE LAPACK_DPB_MATRICES, ONLY   :  RES
       USE COL_VECS, ONLY              :  UL_COL, PL_COL
@@ -186,19 +186,8 @@ Factr:IF (SOLLIB == 'BANDED  ') THEN                       ! Use LAPACK
 
       ELSE IF (SOLLIB == 'SPARSE  ') THEN
 
-         IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
-
-            SLU_INFO = 0
-            CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KLL', L_SET, NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, SLU_INFO )
-
-         ELSE
-
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-            WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-            CALL OUTA_HERE ( 'Y' )
-
-         ENDIF
+         SLU_INFO = 0
+         CALL SYM_MAT_DECOMP_CHOLMOD ( SUBR_NAME, 'KLL', L_SET, NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, SLU_INFO )
 
       ELSE
 
@@ -259,19 +248,8 @@ Solve:DO ISUB = 1,NSUB
 
          ELSE IF (SOLLIB == 'SPARSE  ') THEN
 
-            IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
-
-               SLU_INFO = 0
-               CALL FBS_SUPRLU ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, ISUB, DUM_COL, SLU_INFO )
-
-            ELSE
-
-               FATAL_ERR = FATAL_ERR + 1
-               WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-               WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-               CALL OUTA_HERE ( 'Y' )
-
-            ENDIF
+            SLU_INFO = 0
+            CALL FBS_CHOLMOD ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, ISUB, DUM_COL, SLU_INFO )
 
          ELSE
 
@@ -335,23 +313,10 @@ Solve:DO ISUB = 1,NSUB
 
       ENDDO Solve
 
-FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the storage allocated inside SuperLU
+FreeS:IF (SOLLIB == 'SPARSE  ') THEN
 
-         IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
-
-            DO J=1,NDOFL                                         ! Need a null col of loads when SuperLU is called to factor KLL
-               DUM_COL(J) = ZERO                                  ! (only because it appears in the calling list)
-            ENDDO
-
-            CALL C_FORTRAN_DGSSV( 3, NDOFL, NTERM_KLL, 1, KLL , I_KLL , J_KLL , DUM_COL, NDOFL, SLU_FACTORS, SLU_INFO )
-
-            IF (SLU_INFO .EQ. 0) THEN
-               WRITE (*,*) 'SUPERLU STORAGE FREED'
-            ELSE
-               WRITE(*,*) 'SUPERLU STORAGE NOT FREED. INFO FROM SUPERLU FREE STORAGE ROUTINE = ', SLU_INFO
-            ENDIF
-
-         ENDIF
+         SLU_INFO = 0
+         CALL FREE_CHOLMOD ( SUBR_NAME, 'KLL', SLU_INFO )
 
       ENDIF FreeS
  
@@ -475,8 +440,6 @@ FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the stor
 !***********************************************************************************************************************************
 
       END SUBROUTINE LINK3
-
-
 
 
 

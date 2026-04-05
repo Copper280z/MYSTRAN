@@ -33,6 +33,7 @@
       USE READ_L1A_Interface
       USE OUTA_HERE_Interface
       USE SYM_MAT_DECOMP_LAPACK_Interface
+      USE SYM_MAT_DECOMP_CHOLMOD_Interface
       USE SYM_MAT_DECOMP_SUPRLU_Interface
       USE ALLOCATE_LAPACK_MAT_Interface
       USE FILE_OPEN_Interface
@@ -40,7 +41,9 @@
       USE GET_SPARSE_CRS_COL_Interface
       USE WRITE_VECTOR_Interface
       USE FBS_LAPACK_Interface
+      USE FBS_CHOLMOD_Interface
       USE FBS_SUPRLU_Interface
+      USE FREE_CHOLMOD_Interface
       USE EPSCALC_Interface
       USE VECINORM_Interface
       USE DEALLOCATE_COL_VEC_Interface

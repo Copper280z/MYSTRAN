@@ -42,5 +42,6 @@
       USE STIFF_MAT_EQUIL_CHK_Interface
       USE DEALLOCATE_RBGLOBAL_Interface
       USE REDUCE_KFFD_TO_KAAD_Interface
+      USE FREE_CHOLMOD_Interface
 
       END MODULE REDUCE_F_AO_USE_IFs

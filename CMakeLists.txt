@@ -8,6 +8,9 @@ include(CheckFunctionExists)
 
 project(Mystran)
 enable_language(Fortran)
+enable_language(C)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(CHOLMOD REQUIRED IMPORTED_TARGET cholmod)
 
 if(WIN32)
   enable_language(RC)
@@ -304,6 +307,7 @@ add_executable(
   mystran
   ${ALL_FORTRAN_FILES}
   ${SLU_DRIVER}
+  ${CMAKE_SOURCE_DIR}/UTIL/c_fortran_dcholmod.c
   ${missing_blas_src}
 )
 
@@ -320,6 +324,8 @@ if(USE_SUPERLU_MT)
 else()
   target_link_libraries(mystran PRIVATE superlu f2c)
 endif()
+
+target_link_libraries(mystran PRIVATE PkgConfig::CHOLMOD)
 
 set_target_properties(
   mystran PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}

@@ -32,10 +32,10 @@
  
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F04, F06, SCR, L2A, LINK2A, L2A_MSG, SC1, WRT_LOG
-      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, NDOFG, NDOFM, NTERM_RMG, NTERM_RMN, NTERM_RMM, NTERM_GMN
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, NDOFG, NDOFM, NDOFN, NTERM_RMG, NTERM_RMN, NTERM_RMM, NTERM_GMN
       USE PARAMS, ONLY                :  EPSIL, PRTRMG, PRTGMN, SOLLIB, SUPINFO
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  ONE
+      USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE SUBR_BEGEND_LEVELS, ONLY    :  SOLVE_GMN_BEGEND
       USE SPARSE_MATRICES, ONLY       :  I_RMG, J_RMG, RMG, I_RMN, J_RMN, RMN, I_RMM, J_RMM, RMM, I_GMN, J_GMN, GMN 
       USE SPARSE_MATRICES, ONLY       :  SYM_RMG, SYM_RMN, SYM_RMM
@@ -51,6 +51,7 @@
       CHARACTER(  8*BYTE)             :: CLOSE_STAT          ! Char constant for the CLOSE status of a file
       CHARACTER(  1*BYTE)             :: RMM_DIAG            ! 'Y' if matrix RMM is diagonal.
       CHARACTER(  1*BYTE)             :: RMM_IDENTITY        ! 'Y' if matrix RMM is an identity matrix.
+      CHARACTER(  1*BYTE)             :: RMM_PREPROCESSED    ! 'Y' if RMM/RMN were reduced to an identity RMM in a bounded dense pass.
  
       INTEGER(LONG), INTENT(IN)       :: PART_VEC_G_NM(NDOFG)! Partitioning vector (G set into N and M sets) 
       INTEGER(LONG), INTENT(IN)       :: PART_VEC_M(NDOFM)   ! Partitioning vector (1's for all M set DOF's) 
@@ -127,76 +128,86 @@
          ENDIF
       ENDIF
 
+! For modest M-set systems, try to reorder and row-reduce [RMM | RMN] so the constraint solve can use an identity RMM. If any
+! prerequisite fails, leave the sparse matrices unchanged and fall back to the normal diagonal or nonsymmetric solve below.
+
+      RMM_PREPROCESSED = 'N'
+      CALL TRY_RMM_PREPROCESS ( RMM_PREPROCESSED )
+
 ! Find out if RMM is a diagonal matrix. Getting sol'n for GMN will then be trivial
 
-      RMM_DIAG     = 'Y'                                   ! Find out if RMM is a diagonal or identity matrix
-      RMM_IDENTITY = 'Y'
-      IF (NTERM_RMM == NDOFM) THEN                         ! There are as many terms in RMM as rows so maybe diag or identity
-         DO I=1,NDOFM 
-            IF (J_RMM(I) /= I) THEN                        ! The i-th term in RMM is not a diagonal term
-               RMM_DIAG     = 'N'
-               RMM_IDENTITY = 'N'
-               EXIT
-            ENDIF
-         ENDDO 
-         IF (RMM_DIAG == 'Y') THEN                         ! If RMM is diagonal, check for 1.0 on diagonal (identity matrix)
-            DO I=1,NDOFM
-               IF (DABS(RMM(I) - ONE) > EPS1) THEN
+      IF (RMM_PREPROCESSED == 'N') THEN
+
+         RMM_DIAG     = 'Y'                                ! Find out if RMM is a diagonal or identity matrix
+         RMM_IDENTITY = 'Y'
+         IF (NTERM_RMM == NDOFM) THEN                      ! There are as many terms in RMM as rows so maybe diag or identity
+            DO I=1,NDOFM 
+               IF (J_RMM(I) /= I) THEN                     ! The i-th term in RMM is not a diagonal term
+                  RMM_DIAG     = 'N'
                   RMM_IDENTITY = 'N'
+                  EXIT
                ENDIF
             ENDDO 
+            IF (RMM_DIAG == 'Y') THEN                      ! If RMM is diagonal, check for 1.0 on diagonal (identity matrix)
+               DO I=1,NDOFM
+                  IF (DABS(RMM(I) - ONE) > EPS1) THEN
+                     RMM_IDENTITY = 'N'
+                  ENDIF
+               ENDDO 
+            ENDIF
+         ELSE                                              ! RMM is not identity or diagonal        
+            RMM_DIAG     = 'N'
+            RMM_IDENTITY = 'N'
          ENDIF
-      ELSE                                                 ! RMM is not identity or diagonal        
-         RMM_DIAG     = 'N'
-         RMM_IDENTITY = 'N'
-      ENDIF
 ! Now solve for GMN using either simple algorithm (RMM diagonal) or using BANDED or SPARSE equation solver
 
-      IF ((RMM_DIAG == 'Y') .AND. (DEBUG(20) /= 1)) THEN  ! We can do simple inverse of diagonal matrix RMM
+         IF ((RMM_DIAG == 'Y') .AND. (DEBUG(20) /= 1)) THEN ! We can do simple inverse of diagonal matrix RMM
 
-         WRITE(ERR,2293) 
-         IF (SUPINFO == 'N') THEN
-            WRITE(F06,2293) 
-         ENDIF
-         NTERM_GMN = NTERM_RMN
-
-         CALL ALLOCATE_L2_GMN_2 ( SUBR_NAME )
-         CALL ALLOCATE_SPARSE_MAT ( 'GMN', NDOFM, NTERM_GMN, SUBR_NAME )
-
-         DO I=1,NDOFM+1
-            I_GMN(I) = I_RMN(I)
-         ENDDO      
-         K = 0
-         DO I=1,NDOFM
-            RMN_ROW_I_NTERMS = I_RMN(I+1) - I_RMN(I)
-            DO J=1,RMN_ROW_I_NTERMS
-               K = K + 1
-               J_GMN(K) = J_RMN(K)
-               IF (RMM_IDENTITY == 'Y') THEN
-                  GMN(K) = -RMN(K)
-               ELSE
-                  IF (DABS(RMM(I)) > EPS1) THEN  
-                     J_GMN(K)  = J_RMN(K)
-                       GMN(K)  = -RMN(K)/RMM(I)
-                  ELSE
-                     WRITE(ERR,2203) K
-                     WRITE(F06,2203) K
-                     FATAL_ERR = FATAL_ERR + 1
-                     CALL OUTA_HERE ( 'Y' )
-                  ENDIF
-               ENDIF
-            ENDDO 
-         ENDDO
-
-      ELSE                                                 ! Either RMM is not diagonal or DEBUG(20) =1 so we will do full sol'n
-!                                                            for GMN from eqn RMM*GMN = -RMN
-         IF (RMM_DIAG == 'Y') THEN
-            WRITE(ERR,2294)
+            WRITE(ERR,2293) 
             IF (SUPINFO == 'N') THEN
-               WRITE(F06,2294)
+               WRITE(F06,2293) 
             ENDIF
-         ENDIF 
-         CALL SOLVE_GMN_SOLVER
+            NTERM_GMN = NTERM_RMN
+
+            CALL ALLOCATE_L2_GMN_2 ( SUBR_NAME )
+            CALL ALLOCATE_SPARSE_MAT ( 'GMN', NDOFM, NTERM_GMN, SUBR_NAME )
+
+            DO I=1,NDOFM+1
+               I_GMN(I) = I_RMN(I)
+            ENDDO      
+            K = 0
+            DO I=1,NDOFM
+               RMN_ROW_I_NTERMS = I_RMN(I+1) - I_RMN(I)
+               DO J=1,RMN_ROW_I_NTERMS
+                  K = K + 1
+                  J_GMN(K) = J_RMN(K)
+                  IF (RMM_IDENTITY == 'Y') THEN
+                     GMN(K) = -RMN(K)
+                  ELSE
+                     IF (DABS(RMM(I)) > EPS1) THEN  
+                        J_GMN(K)  = J_RMN(K)
+                          GMN(K)  = -RMN(K)/RMM(I)
+                     ELSE
+                        WRITE(ERR,2203) K
+                        WRITE(F06,2203) K
+                        FATAL_ERR = FATAL_ERR + 1
+                        CALL OUTA_HERE ( 'Y' )
+                     ENDIF
+                  ENDIF
+               ENDDO 
+            ENDDO
+
+         ELSE                                              ! Either RMM is not diagonal or DEBUG(20) =1 so we will do full sol'n
+!                                                            for GMN from eqn RMM*GMN = -RMN
+            IF (RMM_DIAG == 'Y') THEN
+               WRITE(ERR,2294)
+               IF (SUPINFO == 'N') THEN
+                  WRITE(F06,2294)
+               ENDIF
+            ENDIF 
+            CALL SOLVE_GMN_SOLVER
+
+         ENDIF
 
       ENDIF
 
@@ -262,6 +273,14 @@
  2294 FORMAT(' *INFORMATION: THE RMM CONSTRAINT MATRIX IS DIAGONAL. HOWEVER, SINCE DEBUG(20) = 1'                                  &
                     ,/,14X,' SUBR SOLVE_GMN_SOLVER WILL BE CALLED TO SOLVE FOR THE GMN CONSTRAINT MATRIX',/)
 
+ 2295 FORMAT(' *INFORMATION: THE RMM CONSTRAINT MATRIX WAS REORDERED TO A LOWER-TRIANGULAR FORM AND ROW-REDUCED TO IDENTITY.'     &
+                    ,/,14X,' GMN WAS FORMED DIRECTLY FROM THE REDUCED [RMM | RMN] SYSTEM.',/)
+
+ 2296 FORMAT(' *INFORMATION: THE RMM PREPROCESSOR WAS SKIPPED. ',A)
+
+ 2297 FORMAT(' *INFORMATION: THE RMM PREPROCESSOR COULD NOT REDUCE RMM TO IDENTITY. ',A                                            &
+                    ,/,14X,' THE GENERAL NONSYMMETRIC RMM SOLVER WILL BE USED.',/)
+
  9991 FORMAT(' *ERROR  9991: PROGRAMMING ERROR IN SUBROUTINE ',A                                                                   &
                     ,/,14X,A, ' = ',A,' NOT PROGRAMMED ',A)
 
@@ -270,7 +289,224 @@
 ! ##################################################################################################################################
  
       CONTAINS
- 
+
+! ##################################################################################################################################
+
+      SUBROUTINE TRY_RMM_PREPROCESS ( PREPROCESSED )
+
+      IMPLICIT NONE
+
+      CHARACTER( 1*BYTE), INTENT(OUT) :: PREPROCESSED
+      CHARACTER(96*BYTE)              :: FAIL_REASON
+      INTEGER(LONG)                   :: ALLOC_ERR
+      INTEGER(LONG)                   :: HEAD
+      INTEGER(LONG)                   :: IROW
+      INTEGER(LONG)                   :: JCOL
+      INTEGER(LONG)                   :: KROW
+      INTEGER(LONG)                   :: NTERM_GMN_FULL
+      INTEGER(LONG)                   :: NTOP
+      INTEGER(LONG)                   :: TAIL
+      INTEGER(LONG), ALLOCATABLE      :: INDEG(:)
+      INTEGER(LONG), ALLOCATABLE      :: PERM(:)
+      INTEGER(LONG), ALLOCATABLE      :: QUEUE(:)
+      LOGICAL                         :: PREPROCESS_OK
+      REAL(DOUBLE)                    :: DENSE_WORK
+      REAL(DOUBLE)                    :: FACTOR
+      REAL(DOUBLE), PARAMETER         :: MAX_RMM_PREPROCESS_DENSE_TERMS = 3000000.0D0
+      REAL(DOUBLE)                    :: PIVOT
+      REAL(DOUBLE), ALLOCATABLE       :: GMN_FULL_WORK(:,:)
+      REAL(DOUBLE), ALLOCATABLE       :: RMN_FULL_WORK(:,:)
+      REAL(DOUBLE), ALLOCATABLE       :: RMM_FULL_ORIG(:,:)
+      REAL(DOUBLE), ALLOCATABLE       :: RMM_FULL_WORK(:,:)
+
+      PREPROCESSED = 'N'
+      FAIL_REASON  = ' '
+
+      DENSE_WORK = 2.0D0*DBLE(NDOFM)*DBLE(NDOFM + NDOFN)
+      IF (DENSE_WORK > MAX_RMM_PREPROCESS_DENSE_TERMS) THEN
+         WRITE(ERR,8296) 'BOUNDED DENSE WORK ARRAYS WOULD BE TOO LARGE'
+         IF (SUPINFO == 'N') THEN
+            WRITE(F06,8296) 'BOUNDED DENSE WORK ARRAYS WOULD BE TOO LARGE'
+         ENDIF
+         RETURN
+      ENDIF
+
+      ALLOC_ERR = 0
+      ALLOCATE ( INDEG(NDOFM), PERM(NDOFM), QUEUE(NDOFM), STAT=ALLOC_ERR )
+      IF (ALLOC_ERR == 0) THEN
+         ALLOCATE ( RMM_FULL_ORIG(NDOFM,NDOFM), RMM_FULL_WORK(NDOFM,NDOFM), STAT=ALLOC_ERR )
+      ENDIF
+      IF (ALLOC_ERR == 0) THEN
+         ALLOCATE ( RMN_FULL_WORK(NDOFM,NDOFN), GMN_FULL_WORK(NDOFM,NDOFN), STAT=ALLOC_ERR )
+      ENDIF
+
+      IF (ALLOC_ERR /= 0) THEN
+         FAIL_REASON = 'WORK ARRAY ALLOCATION FAILED'
+         GO TO 900
+      ENDIF
+
+      CALL SPARSE_CRS_TO_FULL ( 'RMM       ', NTERM_RMM, NDOFM, NDOFM, SYM_RMM, I_RMM, J_RMM, RMM, RMM_FULL_ORIG )
+      CALL SPARSE_CRS_TO_FULL ( 'RMN       ', NTERM_RMN, NDOFM, NDOFN, SYM_RMN, I_RMN, J_RMN, RMN, RMN_FULL_WORK )
+
+      DO IROW=1,NDOFM
+         IF (DABS(RMM_FULL_ORIG(IROW,IROW)) <= EPS1) THEN
+            FAIL_REASON = 'RMM HAS A ZERO OR TINY DIAGONAL PIVOT'
+            GO TO 900
+         ENDIF
+         INDEG(IROW) = 0
+         DO JCOL=1,NDOFM
+            IF (JCOL /= IROW) THEN
+               IF (DABS(RMM_FULL_ORIG(IROW,JCOL)) > EPS1) THEN
+                  INDEG(IROW) = INDEG(IROW) + 1
+               ENDIF
+            ENDIF
+         ENDDO
+      ENDDO
+
+      HEAD = 1
+      TAIL = 0
+      DO IROW=1,NDOFM
+         IF (INDEG(IROW) == 0) THEN
+            TAIL = TAIL + 1
+            QUEUE(TAIL) = IROW
+         ENDIF
+      ENDDO
+
+      NTOP = 0
+      DO WHILE (HEAD <= TAIL)
+         IROW = QUEUE(HEAD)
+         HEAD = HEAD + 1
+         NTOP = NTOP + 1
+         PERM(NTOP) = IROW
+         DO JCOL=1,NDOFM
+            IF (JCOL /= IROW) THEN
+               IF (DABS(RMM_FULL_ORIG(JCOL,IROW)) > EPS1) THEN
+                  INDEG(JCOL) = INDEG(JCOL) - 1
+                  IF (INDEG(JCOL) == 0) THEN
+                     TAIL = TAIL + 1
+                     QUEUE(TAIL) = JCOL
+                  ENDIF
+               ENDIF
+            ENDIF
+         ENDDO
+      ENDDO
+
+      IF (NTOP /= NDOFM) THEN
+         FAIL_REASON = 'THE M-SET DEPENDENCY GRAPH HAS A CYCLE'
+         GO TO 900
+      ENDIF
+
+      DO IROW=1,NDOFM
+         DO JCOL=1,NDOFM
+            RMM_FULL_WORK(IROW,JCOL) = RMM_FULL_ORIG(PERM(IROW),PERM(JCOL))
+         ENDDO
+         DO JCOL=1,NDOFN
+            GMN_FULL_WORK(IROW,JCOL) = RMN_FULL_WORK(PERM(IROW),JCOL)
+         ENDDO
+      ENDDO
+
+      DO IROW=1,NDOFM
+         IF (DABS(RMM_FULL_WORK(IROW,IROW)) <= EPS1) THEN
+            FAIL_REASON = 'THE REORDERED RMM HAS A ZERO OR TINY DIAGONAL PIVOT'
+            GO TO 900
+         ENDIF
+         DO JCOL=IROW+1,NDOFM
+            IF (DABS(RMM_FULL_WORK(IROW,JCOL)) > EPS1) THEN
+               FAIL_REASON = 'THE REORDERED RMM IS NOT LOWER TRIANGULAR'
+               GO TO 900
+            ENDIF
+         ENDDO
+      ENDDO
+
+      PREPROCESS_OK = .TRUE.
+      DO IROW=1,NDOFM
+         PIVOT = RMM_FULL_WORK(IROW,IROW)
+         IF (DABS(PIVOT) <= EPS1) THEN
+            PREPROCESS_OK = .FALSE.
+            FAIL_REASON = 'ROW REDUCTION FOUND A ZERO OR TINY DIAGONAL PIVOT'
+            EXIT
+         ENDIF
+         DO JCOL=1,NDOFN
+            GMN_FULL_WORK(IROW,JCOL) = GMN_FULL_WORK(IROW,JCOL)/PIVOT
+         ENDDO
+         RMM_FULL_WORK(IROW,IROW) = ONE
+         DO KROW=IROW+1,NDOFM
+            FACTOR = RMM_FULL_WORK(KROW,IROW)
+            IF (DABS(FACTOR) > EPS1) THEN
+               DO JCOL=1,NDOFN
+                  GMN_FULL_WORK(KROW,JCOL) = GMN_FULL_WORK(KROW,JCOL) - FACTOR*GMN_FULL_WORK(IROW,JCOL)
+               ENDDO
+               RMM_FULL_WORK(KROW,IROW) = ZERO
+            ENDIF
+         ENDDO
+      ENDDO
+
+      IF (.NOT. PREPROCESS_OK) THEN
+         GO TO 900
+      ENDIF
+
+      DO IROW=1,NDOFM
+         DO JCOL=1,NDOFN
+            RMN_FULL_WORK(IROW,JCOL) = ZERO
+         ENDDO
+      ENDDO
+
+      DO IROW=1,NDOFM
+         DO JCOL=1,NDOFN
+            RMN_FULL_WORK(PERM(IROW),JCOL) = -GMN_FULL_WORK(IROW,JCOL)
+         ENDDO
+      ENDDO
+
+      NTERM_GMN_FULL = 0
+      DO IROW=1,NDOFM
+         DO JCOL=1,NDOFN
+            IF (DABS(RMN_FULL_WORK(IROW,JCOL)) > EPS1) THEN
+               NTERM_GMN_FULL = NTERM_GMN_FULL + 1
+            ENDIF
+         ENDDO
+      ENDDO
+
+      NTERM_GMN = NTERM_GMN_FULL
+      CALL ALLOCATE_L2_GMN_2 ( SUBR_NAME )
+      CALL ALLOCATE_SPARSE_MAT ( 'GMN', NDOFM, NTERM_GMN, SUBR_NAME )
+      CALL FULL_TO_SPARSE_CRS ( 'GMN_FULL   ', NDOFM, NDOFN, RMN_FULL_WORK, NTERM_GMN, EPS1, SUBR_NAME, 'N', I_GMN, J_GMN, GMN )
+
+      WRITE(ERR,8295)
+      IF (SUPINFO == 'N') THEN
+         WRITE(F06,8295)
+      ENDIF
+
+      PREPROCESSED = 'Y'
+
+  900 CONTINUE
+
+      IF ((PREPROCESSED == 'N') .AND. (FAIL_REASON /= ' ')) THEN
+         WRITE(ERR,8297) FAIL_REASON
+         IF (SUPINFO == 'N') THEN
+            WRITE(F06,8297) FAIL_REASON
+         ENDIF
+      ENDIF
+
+      IF (ALLOCATED(GMN_FULL_WORK )) DEALLOCATE (GMN_FULL_WORK )
+      IF (ALLOCATED(RMN_FULL_WORK )) DEALLOCATE (RMN_FULL_WORK )
+      IF (ALLOCATED(RMM_FULL_WORK )) DEALLOCATE (RMM_FULL_WORK )
+      IF (ALLOCATED(RMM_FULL_ORIG)) DEALLOCATE (RMM_FULL_ORIG)
+      IF (ALLOCATED(QUEUE       )) DEALLOCATE (QUEUE       )
+      IF (ALLOCATED(PERM        )) DEALLOCATE (PERM        )
+      IF (ALLOCATED(INDEG       )) DEALLOCATE (INDEG       )
+
+      RETURN
+
+ 8295 FORMAT(' *INFORMATION: THE RMM CONSTRAINT MATRIX WAS REORDERED TO A LOWER-TRIANGULAR FORM AND ROW-REDUCED TO IDENTITY.'     &
+                    ,/,14X,' GMN WAS FORMED DIRECTLY FROM THE REDUCED [RMM | RMN] SYSTEM.',/)
+
+ 8296 FORMAT(' *INFORMATION: THE RMM PREPROCESSOR WAS SKIPPED. ',A)
+
+ 8297 FORMAT(' *INFORMATION: THE RMM PREPROCESSOR COULD NOT REDUCE RMM TO IDENTITY. ',A                                            &
+                    ,/,14X,' THE GENERAL NONSYMMETRIC RMM SOLVER WILL BE USED.',/)
+
+      END SUBROUTINE TRY_RMM_PREPROCESS
+
 ! ##################################################################################################################################
  
       SUBROUTINE SOLVE_GMN_SOLVER

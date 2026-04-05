@@ -121,6 +121,55 @@ $$ G_{MN} = -R_{MM}^{-1} R_{MN} $$
 
 $$ \textsf{\color{red} end} $$
 
+The matrix $R_{MM}$ is a partition of the rigid/MPC constraint coefficient matrix, not a stiffness
+matrix. In general it is not symmetric. For simple rigid-element dependency chains it may reduce to
+an identity or diagonal form, but for coupled M-set dependencies it is a general nonsymmetric matrix.
+
+In the implementation, MYSTRAN first attempts to simplify the M-set constraint system before calling
+the general nonsymmetric solver. The simplification is applied to the augmented system
+
+$$ \left[ R_{MM} \; \middle| \; R_{MN} \right] $$
+
+and consists of two phases:
+
+1. Phase 1, reorder the M-set equations and M-set unknowns using the dependency graph implied by
+   the off-diagonal terms in $R_{MM}$. If the graph is acyclic, there exists a permutation matrix $P$
+   such that
+
+$$ \widetilde R_{MM} = P R_{MM} P^T $$
+
+is lower triangular, and
+
+$$ \widetilde R_{MN} = P R_{MN} $$
+
+2. Phase 2, apply row operations to the reordered augmented system to reduce the triangular
+   $\widetilde R_{MM}$ block to identity:
+
+$$ L \left[ \widetilde R_{MM} \; \middle| \; \widetilde R_{MN} \right] =
+   \left[ I \; \middle| \; \widehat R_{MN} \right] $$
+
+where $L$ is the product of the row-scaling and elimination operators. The constraint equation then
+becomes
+
+$$ \widetilde U_M = -\widehat R_{MN} U_N $$
+
+so that, in the reordered space,
+
+$$ \widetilde G_{MN} = -\widehat R_{MN} $$
+
+and the final matrix in the original M-set ordering is recovered with
+
+$$ G_{MN} = P^T \widetilde G_{MN} $$
+
+This preprocessing is bounded to modest M-set systems so that it does not require excessive dense
+workspace. If the required work arrays would be too large, if the dependency graph contains a cycle,
+or if a usable diagonal pivot is not available during the reduction, MYSTRAN skips the preprocessing
+and solves
+
+$$ R_{MM} G_{MN} = -R_{MN} $$
+
+with the general nonsymmetric solver instead.
+
 The bars over the N-set mass, stiffness and loads matrices are used for convenience to distinguish
 these terms from those that will result from the reduction of the G-set to the N-set. From the second
 of the constraint equations in 8.5 solve for UM in terms of UN:

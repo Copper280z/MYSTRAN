@@ -34,9 +34,10 @@
       USE TIMDAT, ONLY                :  TSEC       
       USE CONSTANTS_1, ONLY           :  ZERO
       USE PARAMS, ONLY                :  CRS_CCS, SPARSTOR, BAILOUT
-      USE SCRATCH_MATRICES, ONLY      :  I_CCS1, J_CCS1, CCS1
+      USE SCRATCH_MATRICES, ONLY      :  I_CCS1, J_CCS1, CCS1, I_CRS1, J_CRS1, CRS1
       USE SuperLU_STUF, ONLY          :  SLU_FACTORS
       USE SUBR_BEGEND_LEVELS, ONLY    :  SYM_MAT_DECOMP_SUPRLU_BEGEND
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
 
       USE SYM_MAT_DECOMP_SUPRLU_USE_IFs
                       
@@ -62,9 +63,16 @@
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = SYM_MAT_DECOMP_SUPRLU_BEGEND
       INTEGER(LONG)                   :: COMPV             ! Component number (1-6) of a grid DOF
       INTEGER(LONG)                   :: GRIDV             ! Grid number
+      INTEGER(LONG)                   :: J                 ! DO loop index
+      INTEGER(LONG)                   :: HS_SLOT
+      INTEGER(LONG)                   :: NTERM_SUPRLU      ! Number of terms handed to SuperLU
+      INTEGER(LONG)                   :: NUM_MATIN_DIAG_0  ! Number of zero diagonal terms in the input matrix
+      LOGICAL                         :: MATIN_IS_FULL
 
       REAL(DOUBLE) , INTENT(IN)       :: MATIN(NTERMS)
       REAL(DOUBLE)                    :: DUM_COL(NROWS)    ! Temp variable for solving equations
+      REAL(DOUBLE)                    :: HS_PHASE_T0
+      REAL(DOUBLE)                    :: HS_T0
 
 ! **********************************************************************************************************************************
       IF (WRT_LOG >= SUBR_BEGEND) THEN
@@ -73,39 +81,44 @@
  9001    FORMAT(1X,A,' BEGN ',F10.3)
       ENDIF
 
+      CALL HOTSPOT_TIMER_BEGIN ( 'SYM_MAT_DECOMP_SUPRLU', HS_SLOT, HS_T0 )
+
 ! **********************************************************************************************************************************
 
       DO I=1,NROWS                                         ! Need a null col of loads when SuperLU is called to factor KLL
          DUM_COL(I) = ZERO                                 ! (only because it appears in the calling list)
       ENDDO
 
-      IF      (SPARSTOR == 'SYM   ') THEN
+      IF (SPARSTOR == 'SYM   ') THEN
 
-         write(f06,*) ' Code not written for sparse SuperLU decomp when SPARSTOR = SYM'
-         stop
+         MATIN_IS_FULL = .FALSE.
+         DO I=1,NROWS
+            DO J=I_MATIN(I),I_MATIN(I+1)-1
+               IF (J_MATIN(J) < I) THEN
+                  MATIN_IS_FULL = .TRUE.
+                  EXIT
+               ENDIF
+            ENDDO
+            IF (MATIN_IS_FULL) EXIT
+         ENDDO
+
+         IF (.NOT.MATIN_IS_FULL) THEN
+            HS_PHASE_T0 = HOTSPOT_WALL_TIME()
+            CALL SPARSE_MAT_DIAG_ZEROS ( MATIN_NAME, NROWS, NTERMS, I_MATIN, J_MATIN, NUM_MATIN_DIAG_0 )
+            NTERM_SUPRLU = 2*NTERMS - (NROWS - NUM_MATIN_DIAG_0)
+            IF (ALLOCATED(CRS1)) CALL DEALLOCATE_SCR_MAT ( 'CRS1' )
+            CALL ALLOCATE_SCR_CRS_MAT ( 'CRS1', NROWS, NTERM_SUPRLU, SUBR_NAME )
+            CALL CRS_SYM_TO_CRS_NONSYM ( MATIN_NAME, NROWS, NTERMS, I_MATIN, J_MATIN, MATIN, 'CRS1', NTERM_SUPRLU,                 &
+                                         I_CRS1, J_CRS1, CRS1, 'N' )
+            CALL HOTSPOT_TIMER_ADD ( 'SYM_MAT_DECOMP_SUPRLU/EXPAND_SYM_TO_NONSYM', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
+         ELSE
+            NTERM_SUPRLU = NTERMS
+         ENDIF
 
       ELSE IF (SPARSTOR == 'NONSYM') THEN
 
-         IF      (CRS_CCS == 'CRS') THEN                ! Use MATIN stored in Compressed Row Storage (CRS) format
-
-            CALL C_FORTRAN_DGSSV( 1, NROWS, NTERMS, 1, MATIN, J_MATIN, I_MATIN, DUM_COL, NROWS, SLU_FACTORS, INFO )
-
-         ELSE IF (CRS_CCS == 'CCS') THEN                ! Use MATIN stored in Compressed Col Storage (CCS) format
-
-            CALL ALLOCATE_SCR_CCS_MAT ( 'CCS1', NROWS, NTERMS, SUBR_NAME )
-            CALL SPARSE_CRS_SPARSE_CCS ( NROWS, NROWS, NTERMS, MATIN_NAME, I_MATIN, J_MATIN, MATIN, 'CCS1', J_CCS1, I_CCS1, CCS1,  &
-                                        'Y' )
-            CALL C_FORTRAN_DGSSV( 1, NROWS, NTERMS, 1, CCS1, I_CCS1, J_CCS1, DUM_COL, NROWS, SLU_FACTORS, INFO )
-
-         ELSE
-
-            WRITE(ERR,933) SUBR_NAME, 'CRS_CCS'
-            WRITE(F06,933) SUBR_NAME, 'CRS_CCS'
-            FATAL_ERR = FATAL_ERR + 1
-            CALL OUTA_HERE ( 'Y' )
-
-         ENDIF
-
+         MATIN_IS_FULL = .TRUE.
+         NTERM_SUPRLU = NTERMS
 
       ELSE                                              ! Error - incorrect CRS_CCS 
 
@@ -114,6 +127,47 @@
          FATAL_ERR = FATAL_ERR + 1
          CALL OUTA_HERE ( 'Y' )
 
+      ENDIF
+
+      IF      (CRS_CCS == 'CRS') THEN                   ! Use MATIN stored in Compressed Row Storage (CRS) format
+
+         IF (MATIN_IS_FULL) THEN
+            HS_PHASE_T0 = HOTSPOT_WALL_TIME()
+            CALL C_FORTRAN_DGSSV( 1, NROWS, NTERM_SUPRLU, 1, MATIN, J_MATIN, I_MATIN, DUM_COL, NROWS, SLU_FACTORS, INFO )
+            CALL HOTSPOT_TIMER_ADD ( 'SYM_MAT_DECOMP_SUPRLU/SUPERLU_CALL', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
+         ELSE
+            HS_PHASE_T0 = HOTSPOT_WALL_TIME()
+            CALL C_FORTRAN_DGSSV( 1, NROWS, NTERM_SUPRLU, 1, CRS1, J_CRS1, I_CRS1, DUM_COL, NROWS, SLU_FACTORS, INFO )
+            CALL HOTSPOT_TIMER_ADD ( 'SYM_MAT_DECOMP_SUPRLU/SUPERLU_CALL', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
+         ENDIF
+
+      ELSE IF (CRS_CCS == 'CCS') THEN                   ! Convert CRS input to Compressed Col Storage (CCS) format
+
+         IF (ALLOCATED(CCS1)) CALL DEALLOCATE_SCR_MAT ( 'CCS1' )
+         CALL ALLOCATE_SCR_CCS_MAT ( 'CCS1', NROWS, NTERM_SUPRLU, SUBR_NAME )
+         IF (MATIN_IS_FULL) THEN
+            CALL SPARSE_CRS_SPARSE_CCS ( NROWS, NROWS, NTERM_SUPRLU, MATIN_NAME, I_MATIN, J_MATIN, MATIN, 'CCS1', J_CCS1, I_CCS1, &
+                                        CCS1, 'Y' )
+         ELSE
+            CALL SPARSE_CRS_SPARSE_CCS ( NROWS, NROWS, NTERM_SUPRLU, 'CRS1', I_CRS1, J_CRS1, CRS1, 'CCS1', J_CCS1, I_CCS1, CCS1, &
+                                        'Y' )
+         ENDIF
+         HS_PHASE_T0 = HOTSPOT_WALL_TIME()
+         CALL C_FORTRAN_DGSSV( 1, NROWS, NTERM_SUPRLU, 1, CCS1, I_CCS1, J_CCS1, DUM_COL, NROWS, SLU_FACTORS, INFO )
+         CALL HOTSPOT_TIMER_ADD ( 'SYM_MAT_DECOMP_SUPRLU/SUPERLU_CALL', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
+         CALL DEALLOCATE_SCR_MAT ( 'CCS1' )
+
+      ELSE
+
+         WRITE(ERR,933) SUBR_NAME, 'CRS_CCS'
+         WRITE(F06,933) SUBR_NAME, 'CRS_CCS'
+         FATAL_ERR = FATAL_ERR + 1
+         CALL OUTA_HERE ( 'Y' )
+
+      ENDIF
+
+      IF (.NOT.MATIN_IS_FULL) THEN
+         CALL DEALLOCATE_SCR_MAT ( 'CRS1' )
       ENDIF
 
 
@@ -170,8 +224,10 @@
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
          WRITE(F04,9002) SUBR_NAME,TSEC
- 9002    FORMAT(1X,A,' END  ',F10.3)
+  9002    FORMAT(1X,A,' END  ',F10.3)
       ENDIF
+
+      CALL HOTSPOT_TIMER_END ( HS_SLOT, HS_T0 )
 
       RETURN
 
@@ -197,6 +253,4 @@
 !***********************************************************************************************************************************
 
       END SUBROUTINE SYM_MAT_DECOMP_SUPRLU
-
-
 

@@ -28,11 +28,16 @@
 ! USE Interface statements for all subroutines called by SUBROUTINE SYM_MAT_DECOMP_SUPRLU
 
       USE OURTIM_Interface
+      USE ALLOCATE_SCR_CRS_MAT_Interface
       USE ALLOCATE_SCR_CCS_MAT_Interface
+      USE CRS_SYM_TO_CRS_NONSYM_Interface
+      USE SPARSE_MAT_DIAG_ZEROS_Interface
+      USE DEALLOCATE_SCR_MAT_Interface
       USE SPARSE_CRS_SPARSE_CCS_Interface
       USE OUTA_HERE_Interface
       USE GET_GRID_AND_COMP_Interface
       USE COUNTER_INIT_Interface
       USE COUNTER_PROGRESS_Interface
-      
+      USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_ADD, HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END, HOTSPOT_WALL_TIME
+     
       END MODULE SYM_MAT_DECOMP_SUPRLU_USE_IFs

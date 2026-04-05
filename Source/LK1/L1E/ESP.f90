@@ -44,7 +44,7 @@
                                          ELDT_F23_KE_BIT, ELDT_F24_SE_BIT, ELDT_BUG_BCHK_BIT, ELDT_BUG_BMAT_BIT, ELDT_BUG_SHPJ_BIT,&
                                          FATAL_ERR, IBIT, LINKNO, LTERM_KGG, LTERM_KGGD, MBUG, MELDOF, NDOFG, NELE, NGRID,         &
                                          NTERM_KGG, NTERM_KGGD, NSUB, SOL_NAME
-      USE PARAMS, ONLY                :  EPSIL
+      USE PARAMS, ONLY                :  EPSIL, SPARSTOR
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
       USE SUBR_BEGEND_LEVELS, ONLY    :  ESP_BEGEND
@@ -74,6 +74,7 @@
       INTEGER(LONG)                   :: I1                ! Intermediate variable resulting from an IAND operation
       INTEGER(LONG)                   :: IERROR            ! Local error indicator
       INTEGER(LONG)                   :: IGRID             ! Internal grid ID
+      INTEGER(LONG)                   :: KSTART            ! First elem-matrix column to assemble for the current row
       INTEGER(LONG)                   :: KGG_ROW           ! A row no. in KGG or KGGD
       INTEGER(LONG)                   :: KGG_ROWJ          ! Another row no. in KGG or KGGD
       INTEGER(LONG)                   :: KGG_COL           ! A col no. in KGG or KGGD
@@ -89,6 +90,7 @@
       INTEGER(LONG)                   :: ALLOC_TERMS
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = ESP_BEGEND
       INTEGER(LONG)                   :: HS_SLOT
+      LOGICAL                         :: STORE_TRIANGULAR_KGG
       TYPE(FFH_T)                     :: ENTRY_MAP
 
       REAL(DOUBLE)                    :: DQE(MELDOF,NSUB)  ! Dummy array in call to ELEM_TRANSFORM_LBG
@@ -144,6 +146,8 @@
       STF_ROW_HM = 0
       STF_COL_HM = 0
       STF_VAL_HM = ZERO
+      STORE_TRIANGULAR_KGG = (SPARSTOR == 'SYM')
+      IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) STORE_TRIANGULAR_KGG = .FALSE.
 
       CALL TDOF_COL_NUM ( 'G ', G_SET_COL_NUM )
 
@@ -288,7 +292,12 @@ kgg_rows:DO J = 1,ELDOF
                WRITE(F06,*)
             ENDIF
 
-kgg_cols:   DO K = 1,ELDOF
+            IF (STORE_TRIANGULAR_KGG) THEN
+               KSTART = J
+            ELSE
+               KSTART = 1
+            ENDIF
+kgg_cols:   DO K = KSTART,ELDOF
                KGG_ROW  = KGG_ROWJ                         ! Make sure we have correct row num. It may have been flipped w/ col
                KGG_COL  = EDOF(K)
                IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) THEN
@@ -303,6 +312,13 @@ kgg_cols:   DO K = 1,ELDOF
                   ENDIF
                ENDIF
  
+               IF (STORE_TRIANGULAR_KGG) THEN
+                  IF (KGG_COL < KGG_ROW) THEN
+                     KGG_ROW = KGG_ROW + KGG_COL
+                     KGG_COL = KGG_ROW - KGG_COL
+                     KGG_ROW = KGG_ROW - KGG_COL
+                  ENDIF
+               ENDIF
                IF ((DEBUG(10) == 13) .OR. (DEBUG(10) == 33)) THEN
                   IF (ALLOCATED(TEMPLATE)) THEN
                      TEMPLATE(KGG_ROW,KGG_COL) = .TRUE.

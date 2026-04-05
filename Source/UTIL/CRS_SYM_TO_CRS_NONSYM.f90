@@ -86,7 +86,7 @@
       REAL(DOUBLE) , INTENT(IN)       :: A(NTERM_A)        ! Real nonzero values in input  matrix A
       REAL(DOUBLE) , INTENT(OUT)      :: B(NTERM_B)        ! Real nonzero values in output matrix B
 
-      CHARACTER(LEN=LEN(NAME_A)+7+LEN("Calculating : row")) :: COUNTER_TEMPLATE
+      CHARACTER(64*BYTE)              :: COUNTER_TEMPLATE
 
 ! **********************************************************************************************************************************
       IF (WRT_LOG >= SUBR_BEGEND) THEN
@@ -126,7 +126,7 @@
       K      = 0
       A_ROW_BEG = 1
 
-      WRITE(COUNTER_TEMPLATE, 12345) NAME_B
+      WRITE(COUNTER_TEMPLATE, 12345) TRIM(NAME_B)
       CALL COUNTER_INIT(COUNTER_TEMPLATE, NROW_A)
 i_do: DO I=1,NROW_A                                        ! Matrix multiply loop. Range over the rows in A
 

@@ -51,6 +51,7 @@
       INTEGER(LONG)                   :: NZERO
       INTEGER(LONG)                   :: POS
       INTEGER(LONG)                   :: RAW_NTERM
+      INTEGER(LONG), ALLOCATABLE      :: ROW_NEXT(:)
       INTEGER(LONG)                   :: ROW_END
       INTEGER(LONG)                   :: ROW_START
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = SPARSE_KGGD_BEGEND
@@ -97,104 +98,49 @@
 
       CALL ALLOCATE_SPARSE_MAT ( 'KGGD', NDOFG, NTERM_KGGD, SUBR_NAME )
 
-      IF (NTERM_KGGD > 1) THEN
-         CALL SORT_INT2_REAL1 ( SUBR_NAME, 'KGGD hash triplets', NTERM_KGGD, STF_ROW_HM(1:NTERM_KGGD), STF_COL_HM(1:NTERM_KGGD),  &
-                                STF_VAL_HM(1:NTERM_KGGD) )
-         POS = 1
-         DO WHILE (POS <= NTERM_KGGD)
-            ROW_START = POS
-            DO WHILE ((POS <= NTERM_KGGD) .AND. (STF_ROW_HM(POS) == STF_ROW_HM(ROW_START)))
-               POS = POS + 1
-            ENDDO
-            ROW_END = POS - 1
-            NUM_NONZERO_IN_ROW = ROW_END - ROW_START + 1
-            IF (NUM_NONZERO_IN_ROW > 1) THEN
-               CALL SORT_INT1_REAL1 ( SUBR_NAME, 'KGGD row cols', NUM_NONZERO_IN_ROW, STF_COL_HM(ROW_START:ROW_END),             &
-                                      STF_VAL_HM(ROW_START:ROW_END) )
-            ENDIF
-         ENDDO
-      ENDIF
+      DO I=1,NDOFG+1
+         I_KGGD(I) = 0
+      ENDDO
+      DO I=1,NTERM_KGGD
+         I_KGGD(STF_ROW_HM(I)+1) = I_KGGD(STF_ROW_HM(I)+1) + 1
+      ENDDO
+      I_KGGD(1) = 1
+      DO I=1,NDOFG
+         I_KGGD(I+1) = I_KGGD(I+1) + I_KGGD(I)
+      ENDDO
+      ALLOCATE ( ROW_NEXT(NDOFG) )
+      DO I=1,NDOFG
+         ROW_NEXT(I) = I_KGGD(I)
+      ENDDO
+      DO I=1,NTERM_KGGD
+         POS = ROW_NEXT(STF_ROW_HM(I))
+         J_KGGD(POS) = STF_COL_HM(I)
+           KGGD(POS) = STF_VAL_HM(I)
+         ROW_NEXT(STF_ROW_HM(I)) = POS + 1
+      ENDDO
+      DO I=1,NDOFG
+         ROW_START = I_KGGD(I)
+         ROW_END   = I_KGGD(I+1) - 1
+         NUM_NONZERO_IN_ROW = ROW_END - ROW_START + 1
+         IF (NUM_NONZERO_IN_ROW > 1) THEN
+            CALL SORT_INT1_REAL1 ( SUBR_NAME, 'KGGD row cols', NUM_NONZERO_IN_ROW, J_KGGD(ROW_START:ROW_END),                   &
+                                   KGGD(ROW_START:ROW_END) )
+         ENDIF
+      ENDDO
+      DEALLOCATE ( ROW_NEXT )
 
       KTERM_KGGD = 0
-      POS = 1
-      I_KGGD(1) = 1
       CALL COUNTER_INIT('     Working on grid ', NGRID)
-i_do: DO I = 1,NGRID
-
-         DO K=1,6                                          ! Make KGGD_II 6x6 even though for SPOINT's we only use 1-1 term
-            DO L=1,6
-               KGGD_II = ZERO
-            ENDDO
-         ENDDO 
-
-!xx      CALL CALC_TDOF_ROW_NUM ( GRID_ID(INV_GRID_SEQ(I)), IROW_START, 'N' )
-         CALL GET_ARRAY_ROW_NUM ( 'GRID_ID', SUBR_NAME, NGRID, GRID_ID, GRID_ID(INV_GRID_SEQ(I)), IGRID )
-         ROW_NUM_START = TDOF_ROW_START(IGRID)
-         KGGD_COL_NUM = TDOF(ROW_NUM_START,G_SET_COL)
-         CALL GET_GRID_NUM_COMPS ( INV_GRID_SEQ(I), NUM_COMPS, SUBR_NAME )
-k_do:    DO K=1,NUM_COMPS
-
-            KGGD_ROW_NUM = KGGD_ROW_NUM + 1
-            IS = STFKEY(KGGD_ROW_NUM)
-
-            IF (IS == 0) THEN                              ! Check for null row in stiffness matrix
-               I_KGGD(KGGD_ROW_NUM+1) = I_KGGD(KGGD_ROW_NUM)
-               CYCLE k_do
-            ENDIF
-
-            NUM_NONZERO_IN_ROW = 0                         ! Form row of non-zero's in arrays RJ, RSTF
-j_do1:      DO J=1,NDOFG
-               IF (DABS(STF3(IS)%Col_3) >= EPS1) THEN
-                  NUM_NONZERO_IN_ROW = NUM_NONZERO_IN_ROW + 1
-                  RSTF(NUM_NONZERO_IN_ROW) = STF3(IS)%Col_3
-                  RJ(NUM_NONZERO_IN_ROW)   = STF3(IS)%Col_1
-               ENDIF
-               IS = STF3(IS)%Col_2
-               IF (IS == 0) THEN
-                  EXIT j_do1
-               ENDIF
-            ENDDO j_do1
-
-            IF (NUM_NONZERO_IN_ROW > NUM_MAX) THEN
-               NUM_MAX = NUM_NONZERO_IN_ROW
-            ENDIF   
-            IF (IS /= 0) THEN
-               WRITE(ERR,1625) SUBR_NAME,I
-               WRITE(F06,1625) SUBR_NAME,I
-               FATAL_ERR = FATAL_ERR + 1
-               CALL OUTA_HERE ( 'Y' )                       ! Coding error, so quit
-            ENDIF
- 
-            IF (NUM_NONZERO_IN_ROW /= 1) THEN               ! Sort row by the shell method so that RJ is in numerical order
-               CALL SORT_INT1_REAL1 ( SUBR_NAME, 'RJ, RSTF', NUM_NONZERO_IN_ROW, RJ, RSTF )
-            ENDIF   
-
-
-n_do:       DO N=1,NUM_NONZERO_IN_ROW                      ! Formulate the K-th row of KGGD_II
-               IF ((RJ(N) >= KGGD_COL_NUM) .AND. (RJ(N) <= KGGD_COL_NUM+NUM_COMPS-1)) THEN
-                  KGGD_II_COL_NUM = RJ(N) - (KGGD_COL_NUM - 1)
-                  KGGD_II(K,KGGD_II_COL_NUM) = RSTF(N)
-               ENDIF
-            ENDDO n_do
-            
-j_do3:      DO J=1,NUM_NONZERO_IN_ROW
-               KTERM_KGGD = KTERM_KGGD + 1                    ! KTERM_KGGD is a count on the no. records written
-               J_KGGD(KTERM_KGGD) = RJ(J)
-                 KGGD(KTERM_KGGD) = RSTF(J)
-            ENDDO j_do3
-
-            I_KGGD(KGGD_ROW_NUM+1) = I_KGGD(KGGD_ROW_NUM) + NUM_NONZERO_IN_ROW
-
-         ENDDO k_do
-
-         DO K=1,6                                           ! Set lower portion of KGGD_II to be symmetric
-            DO J=1,K-1
-               KGGD_II(K,J) = KGGD_II(J,K)
-            ENDDO
-         ENDDO 
-
-         CALL COUNTER_PROGRESS(I)
-      ENDDO i_do
+      DO I=1,NDOFG
+         ROW_START = I_KGGD(I)
+         ROW_END   = I_KGGD(I+1) - 1
+         NUM_NONZERO_IN_ROW = MAX(0_LONG, ROW_END - ROW_START + 1)
+         IF (NUM_NONZERO_IN_ROW > NUM_MAX) NUM_MAX = NUM_NONZERO_IN_ROW
+         DO J=ROW_START,ROW_END
+            KTERM_KGGD = KTERM_KGGD + 1
+         ENDDO
+         IF (I <= NGRID) CALL COUNTER_PROGRESS(I)
+      ENDDO
 
       WRITE(SC1,*) CR13
 

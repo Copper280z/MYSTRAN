@@ -345,6 +345,11 @@
       CALL WRITE_TIMER_LINE   ( UNT, 'REDUCE_G_NM',           'REDUCE_G_NM' )
       CALL WRITE_TIMER_LINE   ( UNT, 'ELEM_TRANSFORM_LBG',    'ELEM_TRANSFORM_LBG' )
       CALL WRITE_TIMER_LINE   ( UNT, 'SPARSE_KGG',            'SPARSE_KGG' )
+      CALL WRITE_TIMER_LINE   ( UNT, 'SYM_MAT_DECOMP_SUPRLU', 'SYM_MAT_DECOMP_SUPRLU' )
+      CALL WRITE_TIMER_LINE   ( UNT, 'SYM_MAT_DECOMP_SUPRLU/EXPAND_SYM_TO_NONSYM',                                         &
+                                     'SYM_MAT_DECOMP_SUPRLU/EXPAND_SYM_TO_NONSYM' )
+      CALL WRITE_TIMER_LINE   ( UNT, 'SYM_MAT_DECOMP_SUPRLU/SUPERLU_CALL',                                                 &
+                                     'SYM_MAT_DECOMP_SUPRLU/SUPERLU_CALL' )
       CALL WRITE_TIMER_LINE   ( UNT, 'N_SET_AUTOSPC_PROC_1',  'N_SET_AUTOSPC_PROC_1' )
       CALL WRITE_TIMER_LINE   ( UNT, 'N_SET_AUTOSPC_PROC_2',  'N_SET_AUTOSPC_PROC_2' )
       CALL WRITE_TIMER_LINE   ( UNT, 'TDOF_PROC',             'TDOF_PROC' )
@@ -366,6 +371,7 @@
       CALL WRITE_TIMER_LINE   ( UNT, 'EMP/ELEM_TRANSFORM_LBG',          'EMP internal: ELEM_TRANSFORM_LBG' )
       CALL WRITE_TIMER_LINE   ( UNT, 'EMP/MASS_INSERT',                 'EMP internal: mass insertion' )
       CALL WRITE_TIMER_LINE   ( UNT, 'SPARSE_KGG/ZERO_STRIP',           'SPARSE_KGG: recount / zero strip' )
+      CALL WRITE_TIMER_LINE   ( UNT, 'SPARSE_KGG/CRS_BUILD',            'SPARSE_KGG: CRS build' )
       CALL WRITE_TIMER_LINE   ( UNT, 'SPARSE_KGG/ROW_EXTRACT',          'SPARSE_KGG: row extraction' )
       CALL WRITE_TIMER_LINE   ( UNT, 'SPARSE_KGG/ROW_SORT',             'SPARSE_KGG: row sort' )
       CALL WRITE_TIMER_LINE   ( UNT, 'SPARSE_KGG/SINGULARITY_PROC',     'SPARSE_KGG: singularity processing' )

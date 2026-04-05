@@ -50,7 +50,7 @@
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F04, F06, SC1, WRT_ERR, WRT_LOG
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, KMAT_BW, KMAT_DEN, LTERM_KGG, LTERM_KGGD, SOL_NAME
-      USE PARAMS, ONLY                :  GRIDSEQ, SETLKTK, SUPINFO, USR_LTERM_KGG
+      USE PARAMS, ONLY                :  GRIDSEQ, SETLKTK, SPARSTOR, SUPINFO, USR_LTERM_KGG
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO
@@ -148,6 +148,7 @@
       INTEGER(LONG)                   :: DELTA_LTERM       ! Increment of LTERM for one element
       INTEGER(LONG)                   :: I                 ! DO loop index
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = ESP0_BEGEND + 1
+      LOGICAL                         :: STORE_TRIANGULAR_KGG
 ! **********************************************************************************************************************************
       IF (WRT_LOG >= SUBR_BEGEND) THEN
          CALL OURTIM
@@ -160,11 +161,17 @@
  
 
       LTERM = 0
+      STORE_TRIANGULAR_KGG = (SPARSTOR == 'SYM')
+      IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) STORE_TRIANGULAR_KGG = .FALSE.
       DO I = 1,NELE
  
          CALL GET_ELGP ( I )
 
-         DELTA_LTERM = (6*ELGP)*(6*ELGP)
+         IF (STORE_TRIANGULAR_KGG) THEN
+            DELTA_LTERM = 3*ELGP*(6*ELGP + 1)
+         ELSE
+            DELTA_LTERM = (6*ELGP)*(6*ELGP)
+         ENDIF
          LTERM = LTERM + DELTA_LTERM
 
     
@@ -368,7 +375,9 @@
       INTEGER(LONG), INTENT(OUT)      :: LTERM             ! Count of number of estimated terms in KGG or KGGD
       INTEGER(LONG)                   :: I,J,K             ! DO loop indices
       INTEGER(LONG)                   :: IERROR            ! Local error indicator
+      INTEGER(LONG)                   :: KSTART            ! Index
       INTEGER(LONG), PARAMETER        :: SUBR_BEGEND = ESP0_BEGEND
+      LOGICAL                         :: STORE_TRIANGULAR_KGG
       REAL(DOUBLE)                    :: DQE(MELDOF,NSUB)  ! Dummy array in call to ELEM_TRANSFORM_LBG
       REAL(DOUBLE)                    :: EPS1              ! A small number to compare real zero
  
@@ -385,6 +394,8 @@
 !xx   WRITE(SC1, * )                                       ! Advance 1 line for screen messages         
 
       EPS1 = EPSIL(1)
+      STORE_TRIANGULAR_KGG = (SPARSTOR == 'SYM')
+      IF ((SOL_NAME(1:8) == 'BUCKLING') .AND. (LOAD_ISTEP == 2)) STORE_TRIANGULAR_KGG = .FALSE.
 
 ! Null dummy array DQE used in call to ELEM_TRANSFORM_LBG
 
@@ -436,7 +447,12 @@ elems:DO I=1,NELE
 ! Count nonzero terms in transformed KE
 
 kgg_rows:DO J=1,ELDOF
-kgg_cols:   DO K=1,ELDOF
+            IF (STORE_TRIANGULAR_KGG) THEN
+               KSTART = J
+            ELSE
+               KSTART = 1
+            ENDIF
+kgg_cols:   DO K=KSTART,ELDOF
                IF (DABS(KE(J,K)) < EPS1) THEN
                   CYCLE kgg_cols
                ELSE

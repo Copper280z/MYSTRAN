@@ -37,7 +37,7 @@
       USE TIMDAT, ONLY                :  TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  SPARSE_KGG_BEGEND
       USE CONSTANTS_1, ONLY           :  ZERO
-      USE PARAMS, ONLY                :  AUTOSPC, AUTOSPC_RAT, EPSIL, PRTTSET, PRTSTIFF, SPC1QUIT, SUPINFO, SUPWARN
+      USE PARAMS, ONLY                :  AUTOSPC, AUTOSPC_RAT, EPSIL, PRTTSET, PRTSTIFF, SPARSTOR, SPC1QUIT, SUPINFO, SUPWARN
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE MODEL_STUF, ONLY            :  GRID, GRID_ID, GRID_SEQ, MPC_IND_GRIDS, INV_GRID_SEQ
       USE DOF_TABLES, ONLY            :  TDOF, TDOF_ROW_START, TDOFI, TSET
@@ -77,6 +77,7 @@
       INTEGER(LONG)                   :: OUNT(2)
       INTEGER(LONG)                   :: POS
       INTEGER(LONG)                   :: RAW_NTERM
+      INTEGER(LONG), ALLOCATABLE      :: ROW_NEXT(:)
       INTEGER(LONG)                   :: ROW_END
       INTEGER(LONG)                   :: ROW_NUM_START
       INTEGER(LONG)                   :: ROW_START
@@ -102,7 +103,11 @@
 ! **********************************************************************************************************************************
       EPS1 = EPSIL(1)
       RAW_NTERM = NTERM_KGG
-      SYM_KGG = 'N'
+      IF (SPARSTOR == 'SYM') THEN
+         SYM_KGG = 'Y'
+      ELSE
+         SYM_KGG = 'N'
+      ENDIF
 
 ! Compact out exact-zero terms after duplicate accumulation in the hash-backed build.
 
@@ -137,27 +142,42 @@
 
       CALL ALLOCATE_SPARSE_MAT ( 'KGG', NDOFG, NTERM_KGG, SUBR_NAME )
 
-! Sort once globally by row, then within each row by column.
+! Build CRS directly from the hash-backed triplets, then sort within each row only.
 
       HS_PHASE_T0 = HOTSPOT_WALL_TIME()
-      IF (NTERM_KGG > 1) THEN
-         CALL SORT_INT2_REAL1 ( SUBR_NAME, 'KGG hash triplets', NTERM_KGG, STF_ROW_HM(1:NTERM_KGG), STF_COL_HM(1:NTERM_KGG),      &
-                                STF_VAL_HM(1:NTERM_KGG) )
-         POS = 1
-         DO WHILE (POS <= NTERM_KGG)
-            ROW_START = POS
-            DO WHILE ((POS <= NTERM_KGG) .AND. (STF_ROW_HM(POS) == STF_ROW_HM(ROW_START)))
-               POS = POS + 1
-            ENDDO
-            ROW_END = POS - 1
-            NUM_NONZERO_IN_ROW = ROW_END - ROW_START + 1
-            IF (NUM_NONZERO_IN_ROW > 1) THEN
-               CALL SORT_INT1_REAL1 ( SUBR_NAME, 'KGG row cols', NUM_NONZERO_IN_ROW, STF_COL_HM(ROW_START:ROW_END),              &
-                                      STF_VAL_HM(ROW_START:ROW_END) )
-            ENDIF
-         ENDDO
-      ENDIF
+      DO I=1,NDOFG+1
+         I_KGG(I) = 0
+      ENDDO
+      DO I=1,NTERM_KGG
+         I_KGG(STF_ROW_HM(I)+1) = I_KGG(STF_ROW_HM(I)+1) + 1
+      ENDDO
+      I_KGG(1) = 1
+      DO I=1,NDOFG
+         I_KGG(I+1) = I_KGG(I+1) + I_KGG(I)
+      ENDDO
+      ALLOCATE ( ROW_NEXT(NDOFG) )
+      DO I=1,NDOFG
+         ROW_NEXT(I) = I_KGG(I)
+      ENDDO
+      DO I=1,NTERM_KGG
+         POS = ROW_NEXT(STF_ROW_HM(I))
+         J_KGG(POS) = STF_COL_HM(I)
+           KGG(POS) = STF_VAL_HM(I)
+         ROW_NEXT(STF_ROW_HM(I)) = POS + 1
+      ENDDO
+      CALL HOTSPOT_TIMER_ADD ( 'SPARSE_KGG/CRS_BUILD', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
+
+      HS_PHASE_T0 = HOTSPOT_WALL_TIME()
+      DO I=1,NDOFG
+         ROW_START = I_KGG(I)
+         ROW_END   = I_KGG(I+1) - 1
+         NUM_NONZERO_IN_ROW = ROW_END - ROW_START + 1
+         IF (NUM_NONZERO_IN_ROW > 1) THEN
+            CALL SORT_INT1_REAL1 ( SUBR_NAME, 'KGG row cols', NUM_NONZERO_IN_ROW, J_KGG(ROW_START:ROW_END), KGG(ROW_START:ROW_END) )
+         ENDIF
+      ENDDO
       CALL HOTSPOT_TIMER_ADD ( 'SPARSE_KGG/ROW_SORT', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )
+      DEALLOCATE ( ROW_NEXT )
 
 ! Open L1L to write stiffness.
 
@@ -183,27 +203,19 @@
          WRITE(F06,9901) AUTOSPC_RAT
       ENDIF
 
-! Build CRS arrays directly from the sorted triplets.
+! Write the finished CRS arrays and LINK1L records.
 
       KTERM_KGG = 0
-      POS = 1
-      I_KGG(1) = 1
       DO I=1,NDOFG
-         ROW_START = POS
-         DO WHILE ((POS <= NTERM_KGG) .AND. (STF_ROW_HM(POS) == I))
-            POS = POS + 1
-         ENDDO
-         ROW_END = POS - 1
+         ROW_START = I_KGG(I)
+         ROW_END   = I_KGG(I+1) - 1
          NUM_NONZERO_IN_ROW = MAX(0_LONG, ROW_END - ROW_START + 1)
          CALL HOTSPOT_VALUE_ADD ( 'KGG_ROWLEN_FINAL', DBLE(NUM_NONZERO_IN_ROW) )
          IF (NUM_NONZERO_IN_ROW > NUM_MAX) NUM_MAX = NUM_NONZERO_IN_ROW
          DO J=ROW_START,ROW_END
             KTERM_KGG = KTERM_KGG + 1
-            J_KGG(KTERM_KGG) = STF_COL_HM(J)
-              KGG(KTERM_KGG) = STF_VAL_HM(J)
-            WRITE(L1L) I, STF_COL_HM(J), STF_VAL_HM(J)
+            WRITE(L1L) I, J_KGG(J), KGG(J)
          ENDDO
-         I_KGG(I+1) = I_KGG(I) + NUM_NONZERO_IN_ROW
       ENDDO
 
 ! Call singularity processor using the finished CRS matrix.

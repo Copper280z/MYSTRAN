@@ -317,11 +317,11 @@ mgg_cols:   DO K = KSTART,ELDOF
             CALL HOTSPOT_COUNTER_ADD ( 'MGGE_NEW_TERMS/OTHER' , INT(1,DBL_LONG) )
          ENDIF
          IF (NTERM_MGGE > LTERM_MGGE) THEN
-            WRITE(ERR,'(A,A,/,A,A,A,I12)')                                                                                           &
-                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+            WRITE(ERR,'(A,A,/,A,A,A,I12)') &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME), &
                   '              TOO MANY NON-ZERO TERMS IN THE ', 'MASS', ' MATRIX. LIMIT IS LTERM_MGGE = ', LTERM_MGGE
-            WRITE(F06,'(A,A,/,A,A,A,I12)')                                                                                           &
-                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+            WRITE(F06,'(A,A,/,A,A,A,I12)') &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME), &
                   '              TOO MANY NON-ZERO TERMS IN THE ', 'MASS', ' MATRIX. LIMIT IS LTERM_MGGE = ', LTERM_MGGE
             CALL OUTA_HERE ( 'Y' )
          ENDIF
@@ -330,11 +330,11 @@ mgg_cols:   DO K = KSTART,ELDOF
          EMS_VAL_HM(NTERM_MGGE) = VALUE
          CALL ENTRY_MAP%STORE_VALUE ( KEY, NTERM_MGGE, IDX )
          IF (IDX < 0) THEN
-            WRITE(ERR,'(A,A,/,A,A,A,I12)')                                                                                           &
-                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+            WRITE(ERR,'(A,A,/,A,A,A,I12)') &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME), &
                   '              TOO MANY NON-ZERO TERMS IN THE ', 'MASS', ' MATRIX. LIMIT IS HASH INDEX = ', IDX
-            WRITE(F06,'(A,A,/,A,A,A,I12)')                                                                                           &
-                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME),                                               &
+            WRITE(F06,'(A,A,/,A,A,A,I12)') &
+                  ' *ERROR  1624: PROGRAMMING ERROR IN SUBROUTINE ', TRIM(SUBR_NAME), &
                   '              TOO MANY NON-ZERO TERMS IN THE ', 'MASS', ' MATRIX. LIMIT IS HASH INDEX = ', IDX
             CALL OUTA_HERE ( 'Y' )
          ENDIF

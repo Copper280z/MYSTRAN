@@ -129,23 +129,21 @@
 
       KTERM_MGGE = 0
       I_MGGE(1) = 1
-      WRITE(SC1, * )
-      CALL COUNTER_INIT('     Working on grid ', NGRID)
-      HS_LOOP_T0 = HOTSPOT_WALL_TIME()
-i_do: DO I = 1,NGRID
-
-         GRID_NUM = GRID_ID(I)
-         IGRID = I
-         ROW_NUM_START = TDOF_ROW_START(IGRID)
-         CALL GET_GRID_NUM_COMPS ( I, NUM_COMPS, SUBR_NAME )
-k_do:    DO K=1,NUM_COMPS
-
-            IK = ROW_NUM_START + K - 1
-            IS = EMSKEY(IK)
-
-            IF (IS == 0) THEN                              ! Check for null row in mass matrix
-               I_MGGE(IK+1) = I_MGGE(IK)
-               CYCLE k_do
+      IF (NTERM_MGGE > 1) THEN
+         HS_PHASE_T0 = HOTSPOT_WALL_TIME()
+         CALL SORT_INT2_REAL1 ( SUBR_NAME, 'MGGE hash triplets', NTERM_MGGE, EMS_ROW_HM(1:NTERM_MGGE), EMS_COL_HM(1:NTERM_MGGE),  &
+                                EMS_VAL_HM(1:NTERM_MGGE) )
+         POS = 1
+         DO WHILE (POS <= NTERM_MGGE)
+            ROW_START = POS
+            DO WHILE ((POS <= NTERM_MGGE) .AND. (EMS_ROW_HM(POS) == EMS_ROW_HM(ROW_START)))
+               POS = POS + 1
+            ENDDO
+            ROW_END = POS - 1
+            NUM_IN_ROW_I = ROW_END - ROW_START + 1
+            IF (NUM_IN_ROW_I > 1) THEN
+               CALL SORT_INT1_REAL1 ( SUBR_NAME, 'MGGE row cols', NUM_IN_ROW_I, &
+                                     EMS_COL_HM(ROW_START:ROW_END), EMS_VAL_HM(ROW_START:ROW_END) )
             ENDIF
          ENDDO
          CALL HOTSPOT_TIMER_ADD ( 'SPARSE_MGG/ROW_SORT', HOTSPOT_WALL_TIME() - HS_PHASE_T0 )

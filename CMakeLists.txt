@@ -10,7 +10,12 @@ project(Mystran)
 enable_language(Fortran)
 enable_language(C)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(CHOLMOD REQUIRED IMPORTED_TARGET cholmod)
+# On Linux (SuiteSparse >=7), the pkg-config name is uppercase "CHOLMOD";
+# on macOS Homebrew it is lowercase "cholmod". Try both.
+pkg_check_modules(CHOLMOD QUIET IMPORTED_TARGET CHOLMOD)
+if(NOT CHOLMOD_FOUND)
+  pkg_check_modules(CHOLMOD REQUIRED IMPORTED_TARGET cholmod)
+endif()
 
 if(WIN32)
   enable_language(RC)

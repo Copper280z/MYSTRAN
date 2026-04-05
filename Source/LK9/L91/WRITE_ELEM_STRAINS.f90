@@ -823,11 +823,11 @@
  1303 FORMAT(1X,I8,2X,'CENTER  ',8X,8(1ES14.6))
 
 
- ! 1301 FORMAT(A,'Element   Epsilon-xx    Epsilon-yy    Epsilon-zz     Gamma-xy      Gamma-yz      Gamma-zx     von Mises'           &
+ ! 1301 FORMAT(A,'Element   Epsilon-xx    Epsilon-yy    Epsilon-zz     Gamma-xy      Gamma-yz      Gamma-zx     von Mises' &
           ! ,/,A,'   ID')
 
- ! 1302 FORMAT(A,'Element   Epsilon-xx    Epsilon-yy    Epsilon-zz     Gamma-xy      Gamma-yz      Gamma-zx        ',                &
-             ! 'Octahedral Strain'                                                                                                   &
+ ! 1302 FORMAT(A,'Element   Epsilon-xx    Epsilon-yy    Epsilon-zz     Gamma-xy      Gamma-yz      Gamma-zx        ', &
+             ! 'Octahedral Strain' &
           ! ,/,A,'   ID',91X,'Direct        Shear')
 
  ! 1303 FORMAT(19X,I8,8(1ES14.6))

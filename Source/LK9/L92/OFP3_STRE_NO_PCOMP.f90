@@ -141,7 +141,7 @@
             CALL IS_ELEM_PCOMP_PROPS ( J )
             IF (PCOMP_PROPS == 'N') THEN
                IF (ETYPE(J) == ELMTYP(I)) THEN
-                  IF ((STRE_LOC == 'CORNER  ') .OR.                                                                                & 
+                  IF ((STRE_LOC == 'CORNER  ') .OR. &
                       (STRE_LOC == 'GAUSS   ') .OR.                                                                                &
                       (ETYPE(J)(1:4) == 'HEXA') .OR.                                                                               &
                       (ETYPE(J)(1:5) == 'PENTA') .OR.                                                                              &
@@ -203,7 +203,7 @@ elems_5: DO J = 1,NELE
                   
                   STRESS_OUT(:,1) = STRESS(:)            ! Set STRESS_OUT for NUM_PTS(I) = 1
 
-                  IF ((STRE_LOC == 'CORNER  ') .OR.                                                                                & 
+                  IF ((STRE_LOC == 'CORNER  ') .OR. &
                       (STRE_LOC == 'GAUSS   ') .OR.                                                                                &
                       (TYPE(1:4) == 'HEXA') .OR.                                                                                   &
                       (TYPE(1:5) == 'PENTA') .OR.                                                                                  &

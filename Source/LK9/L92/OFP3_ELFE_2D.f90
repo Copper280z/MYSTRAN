@@ -218,7 +218,7 @@ elems_3: DO J = 1,NELE
                                          
                         STRESS_OUT(:,1) = STRESS_RAW(:,1)  ! Set STRAIN_OUT for NUM_PTS(I) = 1
 
-                        IF ((FORC_LOC == 'CORNER  ') .OR.                                                                          & 
+                        IF ((FORC_LOC == 'CORNER  ') .OR. &
                             (ETYPE(J)(1:5) == 'QUAD8')) THEN
 
                            IF (TYPE(1:5) == 'QUAD4') THEN

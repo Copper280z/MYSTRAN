@@ -1137,8 +1137,8 @@
           WRITE(OP2) NVALUES
 
 !1702     FORMAT(1X,A,'Element    Location      Fibre        Stresses In Element Coord System       Principal Stresses (Zero Shear)', &
-!  '          Max      Transverse   Transverse'                                                                                       &
-!              ,/,1X,A,'   ID                   Distance     Normal-X     Normal-Y      Shear-XY     Angle     Major        Minor',   &
+!  '          Max      Transverse   Transverse' &
+!              ,/,1X,A,'   ID                   Distance     Normal-X     Normal-Y      Shear-XY     Angle     Major        Minor', &
 !              '      Shear-XY     Shear-XZ     Shear-YZ',/,1X,123X,'(max through thickness)')
 
           ! op2 version of the upper & lower layers all in one call, but without the transverse shear

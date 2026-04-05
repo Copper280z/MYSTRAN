@@ -142,7 +142,7 @@
                CALL IS_ELEM_PCOMP_PROPS ( J )
                IF (PCOMP_PROPS == 'N') THEN
                   IF (ETYPE(J) == ELMTYP(I)) THEN
-                  IF ((STRN_LOC == 'CORNER  ') .OR.                                                                                & 
+                  IF ((STRN_LOC == 'CORNER  ') .OR. &
                       (STRN_LOC == 'GAUSS   ') .OR.                                                                                &
                       (ETYPE(J)(1:4) == 'HEXA') .OR.                                                                               &
                       (ETYPE(J)(1:5) == 'PENTA') .OR.                                                                              &
@@ -205,7 +205,7 @@ elems_7: DO J = 1,NELE
 
                   STRAIN_OUT(:,1) = STRAIN(:)              ! Set STRAIN_OUT for NUM_PTS(I) = 1
 
-                  IF ((STRN_LOC == 'CORNER  ') .OR.                                                                                & 
+                  IF ((STRN_LOC == 'CORNER  ') .OR. &
                       (STRN_LOC == 'GAUSS   ') .OR.                                                                                &
                       (TYPE(1:4) == 'HEXA') .OR.                                                                                   &
                       (TYPE(1:5) == 'PENTA') .OR.                                                                                  &

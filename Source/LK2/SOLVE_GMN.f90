@@ -281,10 +281,11 @@
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE IOUNT1, ONLY                :  FILE_NAM_MAXLEN, WRT_ERR, WRT_LOG, ERR, F04, F06
       USE SCONTR, ONLY                :  NDOFG, NDOFM, NDOFN, NTERM_GMN, NTERM_RMM, NTERM_RMN, BLNK_SUB_NAM
-      USE PARAMS, ONLY                :  EPSIL, SOLLIB
+      USE PARAMS, ONLY                :  EPSIL, SOLLIB, SPARSE_FLAVOR
       USE TIMDAT, ONLY                :  HOUR, MINUTE, SEC, SFRAC, TSEC
       USE SUBR_BEGEND_LEVELS, ONLY    :  SOLVE_GMN_BEGEND
       USE SPARSE_MATRICES, ONLY       :  I_RMN, J_RMN, RMN, I_RMM, J_RMM, RMM, I2_GMN, I_GMN, J_GMN, GMN
+      USE SCRATCH_MATRICES, ONLY      :  I_CCS1, J_CCS1, CCS1
       USE FULL_MATRICES, ONLY         :  RMM_FULL
       USE LAPACK_LIN_EQN_DGE
       USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO
@@ -377,8 +378,21 @@
 
       ELSE IF (SOLLIB == 'SPARSE  ') THEN
 
-         SLU_INFO = 0
-         CALL SYM_MAT_DECOMP_CHOLMOD ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, I_RMM, J_RMM, RMM, SLU_INFO )
+         IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
+
+            SLU_INFO = 0
+            CALL ALLOCATE_SCR_CCS_MAT ( 'CCS1', NDOFM, NTERM_RMM, SUBR_NAME )
+            CALL SPARSE_CRS_SPARSE_CCS ( NDOFM, NDOFM, NTERM_RMM, 'RMM', I_RMM, J_RMM, RMM, 'CCS1', J_CCS1, I_CCS1, CCS1, 'Y')
+            CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, SLU_INFO )
+
+         ELSE
+
+            FATAL_ERR = FATAL_ERR + 1
+            WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
+            WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
+            CALL OUTA_HERE ( 'Y' )
+
+         ENDIF
 
       ELSE
 
@@ -451,8 +465,19 @@
 
             ELSE IF (SOLLIB == 'SPARSE  ') THEN
 
-               SLU_INFO = 0
-               CALL FBS_CHOLMOD ( SUBR_NAME, 'RMM', NDOFM, NTERM_RMM, I_RMM, J_RMM, RMM, J, RMN_COL, SLU_INFO )
+               IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
+
+                  SLU_INFO = 0
+                  CALL FBS_SUPRLU ( SUBR_NAME, 'RMM', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, J, RMN_COL, SLU_INFO )
+
+               ELSE
+
+                  FATAL_ERR = FATAL_ERR + 1
+                  WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
+                  WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
+                  CALL OUTA_HERE ( 'Y' )
+
+               ENDIF
 
             ELSE
 
@@ -479,12 +504,26 @@
 
       WRITE(SC1,*) CR13
 
+      CALL DEALLOCATE_SCR_MAT ( 'CCS1' )
       CALL DEALLOCATE_FULL_MAT ( 'RMM_FULL' )
 
 FreeS:IF (SOLLIB == 'SPARSE  ') THEN
 
-         SLU_INFO = 0
-         CALL FREE_CHOLMOD ( SUBR_NAME, 'RMM', SLU_INFO )
+         IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
+
+            DO J=1,NDOFM
+               DUM_COL(J) = ZERO
+            ENDDO
+
+            CALL C_FORTRAN_DGSSV( 3, NDOFM, NTERM_RMM, 1, RMM, I_RMM, J_RMM, DUM_COL, NDOFM, SLU_FACTORS, SLU_INFO )
+
+            IF (SLU_INFO .EQ. 0) THEN
+               WRITE (*,*) 'SUPERLU STORAGE FREED'
+            ELSE
+               WRITE(*,*) 'SUPERLU STORAGE NOT FREED. INFO FROM SUPERLU FREE STORAGE ROUTINE = ', SLU_INFO
+            ENDIF
+
+         ENDIF
 
       ENDIF FreeS
  

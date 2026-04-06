@@ -73,6 +73,7 @@
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE MODEL_STUF, ONLY            :  EIG_N2, GRID, GRID_ID, GRID_SEQ, INV_GRID_SEQ
       USE HOTSPOT_PROFILER, ONLY      :  HOTSPOT_TIMER_BEGIN, HOTSPOT_TIMER_END
+
       USE TDOF_PROC_USE_IFs
 
       IMPLICIT NONE
@@ -82,7 +83,7 @@
       CHARACTER(LEN=*), INTENT(IN)    :: TDOF_MSG          ! Message to be printed out regarding at what point in the run the TDOF,I
 !                                                            tables are printed out
       CHARACTER(  5*BYTE)             :: SET_NAME          ! A data set name for output purposes
-
+ 
       INTEGER(LONG)                   ::  A_SET_COL        ! Col no. in array TDOF where the  A-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   ::  F_SET_COL        ! Col no. in array TDOF where the  F-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   ::  G_SET_COL        ! Col no. in array TDOF where the  G-set is (from subr TDOF_COL_NUM)
@@ -99,7 +100,7 @@
       INTEGER(LONG)                   :: SZ_SET_COL        ! Col no. in array TDOF where the SZ-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   :: U1_SET_COL        ! Col no. in array TDOF where the U1-set is (from subr TDOF_COL_NUM)
       INTEGER(LONG)                   :: U2_SET_COL        ! Col no. in array TDOF where the U2-set is (from subr TDOF_COL_NUM)
-      INTEGER(LONG)                   :: I,J,K             ! DO loop indices
+      INTEGER(LONG)                   :: I,J               ! DO loop indices
       INTEGER(LONG)                   :: I_USET_U1         ! Counter for USET U1
       INTEGER(LONG)                   :: I_USET_U2         ! Counter for USET U2
       INTEGER(LONG)                   :: IGRID             ! Internal grid number
@@ -149,15 +150,6 @@
       CALL TDOF_COL_NUM ( 'U1', U1_SET_COL )
       CALL TDOF_COL_NUM ( 'U2', U2_SET_COL )
 
-! Clear tables before rebuilding them. TDOF_PROC can be called more than once in a run.
-
-      DO I = 1,LDOFG
-         DO J = 1,MTDOF
-            TDOF(I,J)  = 0
-            TDOFI(I,J) = 0
-         ENDDO
-      ENDDO
-
 ! Set 1st 4 cols of TDOF (actual grid ID - component number, internal grid ID - component number)
 
       IROW = 0
@@ -175,77 +167,18 @@
       ENDDO
 
 ! Calc TDOF for G-set (col 5 in TDOF). We can do this at this point since all components go in G-set.
-
-      NDOFG    = 0
-      NDOFM    = 0
-      NDOFSA   = 0
-      NDOFSB   = 0
-      NDOFSG   = 0
-      NDOFSE   = 0
-      NDOFO    = 0
-      NDOFR    = 0
-      I_USET_U1 = 0
-      I_USET_U2 = 0
-      CALL COUNTER_INIT('       Process direct sets    ', NGRID)
+ 
+      NDOFG = 0
+      CALL COUNTER_INIT('       Process G -set         ', NGRID)
 
       DO I=1,NGRID
          IGRID = INV_GRID_SEQ(I)
          CALL GET_GRID_NUM_COMPS ( INV_GRID_SEQ(I), NUM_COMPS, SUBR_NAME )
          DO J=1,NUM_COMPS
-            IROW = ROW_NUM_START + J - 1
-
+            IROW = TDOF_ROW_START(IGRID) + J - 1
             NDOFG = NDOFG + 1
             IF (NDOFG > LDOFG) CALL ARRAY_SIZE_ERROR_1 ( SUBR_NAME, LDOFG, 'TDOF' )
             TDOF(IROW,G_SET_COL) = NDOFG
-
-            IF (TSET(IGRID,J) == 'M ') THEN
-               NDOFM = NDOFM + 1
-               TDOF(IROW,M_SET_COL) = NDOFM
-            ENDIF
-
-            IF (TSET(IGRID,J) == 'SA') THEN
-               NDOFSA = NDOFSA + 1
-               TDOF(IROW,SA_SET_COL) = NDOFSA
-            ENDIF
-
-            IF (TSET(IGRID,J) == 'SB') THEN
-               NDOFSB = NDOFSB + 1
-               TDOF(IROW,SB_SET_COL) = NDOFSB
-            ENDIF
-
-            IF (TSET(IGRID,J) == 'SG') THEN
-               NDOFSG = NDOFSG + 1
-               TDOF(IROW,SG_SET_COL) = NDOFSG
-            ENDIF
-
-            IF (TSET(IGRID,J) == 'SE') THEN
-               NDOFSE = NDOFSE + 1
-               TDOF(IROW,SE_SET_COL) = NDOFSE
-            ENDIF
-
-            IF (TSET(IGRID,J) == 'O ') THEN
-               NDOFO = NDOFO + 1
-               TDOF(IROW,O_SET_COL) = NDOFO
-            ENDIF
-
-            IF (TSET(IGRID,J) == 'R ') THEN
-               NDOFR = NDOFR + 1
-               TDOF(IROW,R_SET_COL) = NDOFR
-            ENDIF
-
-            IF (NUM_USET_U1 > 0) THEN
-               IF (USET(IGRID,J) == 'U1') THEN
-                  I_USET_U1 = I_USET_U1 + 1
-                  TDOF(IROW,U1_SET_COL) = I_USET_U1
-               ENDIF
-            ENDIF
-
-            IF (NUM_USET_U2 > 0) THEN
-               IF (USET(IGRID,J) == 'U2') THEN
-                  I_USET_U2 = I_USET_U2 + 1
-                  TDOF(IROW,U2_SET_COL) = I_USET_U2
-               ENDIF
-            ENDIF
          ENDDO
          CALL COUNTER_PROGRESS(I)
       ENDDO
@@ -394,23 +327,22 @@
  
 ! Calc TDOF for N-set based on G-set minus M-set = S-set + O-set + R-set + L-set
  
-      NDOFN  = 0
-      NDOFSZ = 0
-      NDOFS  = 0
-      NDOFF  = 0
-      NDOFA  = 0
-      NDOFL  = 0
-      CALL COUNTER_INIT('       Process derived sets   ', NGRID)
+      NDOFN = 0
+      CALL COUNTER_INIT('       Process N -set         ', NGRID)
       DO I=1,NGRID
          IGRID = INV_GRID_SEQ(I)
          CALL GET_GRID_NUM_COMPS ( INV_GRID_SEQ(I), NUM_COMPS, SUBR_NAME )
          DO J=1,NUM_COMPS
-            IROW = ROW_NUM_START + J - 1
-
+            IROW  = TDOF_ROW_START(IGRID) + J - 1
             IF ((TDOF(IROW,G_SET_COL) > 0) .AND. (TDOF(IROW,M_SET_COL) == 0)) THEN
                NDOFN = NDOFN + 1
                TDOF(IROW,N_SET_COL) = NDOFN
+            ELSE
+               TDOF(IROW,N_SET_COL) = 0
             ENDIF
+         ENDDO
+         CALL COUNTER_PROGRESS(I)
+      ENDDO
 
 ! Calc DOF'S in SZ-set (all zero SPC's) based on SA + SB + SG
  
@@ -466,7 +398,12 @@
             IF ((TDOF(IROW,N_SET_COL) > 0) .AND. (TDOF(IROW,S_SET_COL) == 0)) THEN
                NDOFF = NDOFF + 1
                TDOF(IROW,F_SET_COL) = NDOFF
+            ELSE
+               TDOF(IROW,F_SET_COL) = 0
             ENDIF
+         ENDDO
+         CALL COUNTER_PROGRESS(I)
+      ENDDO
 
 ! Calc TDOF for A-set based on F-set minus O-set
  
@@ -480,7 +417,12 @@
             IF ((TDOF(IROW,F_SET_COL) > 0) .AND. (TDOF(IROW,O_SET_COL) == 0)) THEN
                NDOFA = NDOFA + 1
                TDOF(IROW,A_SET_COL) = NDOFA
+            ELSE
+               TDOF(IROW,A_SET_COL) = 0
             ENDIF
+         ENDDO
+         CALL COUNTER_PROGRESS(I)
+      ENDDO
 
 ! Calc TDOF for L-set based on A-set minus R-set
  
@@ -494,6 +436,8 @@
             IF ((TDOF(IROW,A_SET_COL) > 0) .AND. (TDOF(IROW,R_SET_COL) == 0)) THEN
                NDOFL = NDOFL + 1
                TDOF(IROW,L_SET_COL) = NDOFL
+            ELSE
+               TDOF(IROW,L_SET_COL) = 0
             ENDIF
          ENDDO
          CALL COUNTER_PROGRESS(I)
@@ -540,13 +484,15 @@
 ! Sort TDOF so that G-set DOF's are in numerical order
 
 
-      WRITE(SC1,12345,ADVANCE='NO') '       Build TDOFI from TDOF  ', CR13
+      WRITE(SC1,12345,ADVANCE='NO') '       Setting up to get TDOFI', CR13
       DO I=1,NDOFG
-         IROW = TDOF(I,G_SET_COL)
-         DO K=1,MTDOF
-            TDOFI(IROW,K) = TDOF(I,K)
-         ENDDO
-      ENDDO
+         DO J=1,MTDOF
+            TDOFI(I,J) = TDOF(I,J)
+         ENDDO 
+      ENDDO 
+
+      WRITE(SC1,12345,ADVANCE='NO') '       Sort TDOF to get TDOFI ', CR13
+      CALL SORT_TDOF ( SUBR_NAME, 'TDOF', NDOFG, TDOFI, G_SET_COL )
 
 ! Table TDOF is printed in the F06 file if B.D. PARAM PRTDOF = 1 or 3
  
@@ -616,10 +562,9 @@
  1312 FORMAT(' *ERROR  1312: FOR SOL = ''GEN CB MODEL'' THERE MUST BE AN ',A,'-SET WITH AT LEAST NDOFR = 6 DOF''s.'                &
                     ,/,14X,' HOWEVER ONLY ',I1,' DOF''s WERE DEFINED ON BULK DATA SUPORT ENTRIES')
 
-  1313 format(' *ERROR  1313: FOR SOL = "MODES" OR "GEN CB MODEL" THE EIGRL ENTRY MUST HAVE THE NUMBER OF DESIRED MODES > 0',&
-                           ' OR THE PROBLEM DOF SIZE'                                                                              &
+ 1313 format(' *ERROR  1313: FOR SOL = "MODES" OR "GEN CB MODEL" THE EIGRL ENTRY MUST HAVE THE NUMBER OF DESIRED MODES > 0 OR THE',&
+                           ' PROBLEM DOF SIZE'                                                                                     &
                     ,/,14X,' (NDOFL = ',I8,') MUST BE LESS THAT PARAM EIGESTL = ',I8,' (OR USE LARGER VALUE FOR PARAM EIGESTL)')
-
 
 12345 FORMAT(A, A)
 

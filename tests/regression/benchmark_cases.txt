@@ -1,0 +1,30 @@
+# Curated subset of MYSTRAN_Benchmark cases for regression testing.
+# One case per line (paths relative to MYSTRAN_Benchmark/Benchmark_Decks/).
+# Covers: static (bar, hex, RBE, gravity, thermal, buckling), and modal (GIV, INV, LANCZOS).
+# Lines beginning with # are ignored.
+
+# Static — various element types and loading
+SS-BAR-I12.DAT
+SS-BAR-GRAV.DAT
+SS-BAR-OFFSET.DAT
+SS-BAR-THERM-CONSTR.DAT
+SS-BAR-THERM-FREE.DAT
+SS-BAR-PINFLAG.DAT
+SS-ALL-ELEM-TEST.DAT
+SS-HEXA08-02-02-020-CANT-AR1-RED-2x2x2.DAT
+SS-RBE2-01-CBAR-01.DAT
+SS-RBE2-01-CROD-03.DAT
+SS-RBE3-01-CBAR-08.DAT
+SS-RODDISPL-N-LOAD.DAT
+SS-EXAMPLE1.DAT
+
+# Buckling
+SS-BAR-10-BUCKLING-CF-LOAD-LAN.DAT
+
+# Modal — GIV, INV, and LANCZOS solvers
+ES-BAR-CC-GIV.DAT
+ES-BAR-CC-INV.DAT
+ES-BAR-CC-LANCZOS-MODE-2-DPB.DAT
+ES-BAR-FF-GIV.DAT
+ES-ALL-ELEM-TEST-GIV.DAT
+ES-ALL-ELEM-TEST-LANCZOS-MODE-2-DPB.DAT

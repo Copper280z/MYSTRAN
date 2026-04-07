@@ -371,3 +371,9 @@ message(STATUS "You can now compile MYSTRAN with `cmake --build .`")
 if(NOT NCPU EQUAL 0)
   message(STATUS "Compile faster by passing the -j${NCPU} flag.")
 endif()
+
+# ============================================================
+# Testing
+# ============================================================
+enable_testing()
+add_subdirectory(tests/unit)

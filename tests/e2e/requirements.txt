@@ -1,1 +1,1 @@
-pyNastran>=2.3.0
+pyNastran>=1.4.1

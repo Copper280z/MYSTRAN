@@ -37,6 +37,7 @@ set(CMAKE_CONFIGURATION_TYPES
   MinSizeRel
   Profiling
   Deterministic
+  Sanitize
   CACHE STRING "" FORCE
 )
 
@@ -361,6 +362,29 @@ if(CMAKE_COMPILER_IS_GNUCC)
   set(CMAKE_Fortran_FLAGS_PROFILING "${CMAKE_PROFILING_FLAGS}")
   set(CMAKE_EXE_LINKER_FLAGS_PROFILING "")
   set(CMAKE_SHARED_LINKER_FLAGS_PROFILING "")
+  set(CMAKE_SANITIZE_FLAGS
+    "-O2 -g -fno-omit-frame-pointer \
+     -fsanitize=address,undefined \
+     -fno-sanitize-recover=undefined"
+  )
+  set(CMAKE_C_FLAGS_SANITIZE "${CMAKE_SANITIZE_FLAGS}")
+  set(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_SANITIZE_FLAGS}")
+  # ASAN/UBSAN runtime libraries are not available on macOS with GCC;
+  # linker flags are Linux-only.
+  if(UNIX AND NOT APPLE)
+    set(CMAKE_EXE_LINKER_FLAGS_SANITIZE "-fsanitize=address,undefined")
+    set(CMAKE_SHARED_LINKER_FLAGS_SANITIZE "-fsanitize=address,undefined")
+  endif()
+endif()
+
+# Fortran sanitize flags are set separately so they apply whenever gfortran is
+# used, regardless of what C compiler is selected.
+if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+  set(CMAKE_Fortran_FLAGS_SANITIZE
+    "-O2 -g -fno-omit-frame-pointer \
+     -fsanitize=address,undefined \
+     -fno-sanitize-recover=undefined"
+  )
 endif()
 
 # issue a couple messages about compilation

@@ -47,6 +47,8 @@
       USE SPARSE_MATRICES, ONLY       :  SYM_GOA, SYM_KFF, SYM_KAA, SYM_KAO, SYM_KOO
       USE SCRATCH_MATRICES
 
+      USE SYM_MAT_DECOMP_QDLDL_Interface
+
       USE REDUCE_KFF_TO_KAA_USE_IFs
 
       IMPLICIT NONE
@@ -165,6 +167,11 @@
 
                INFO = 0
                CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KOO', 'O ', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, INFO )
+
+            ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+               INFO = 0
+               CALL SYM_MAT_DECOMP_QDLDL ( SUBR_NAME, 'KOO', 'O ', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, INFO )
 
             ELSE
 

@@ -441,8 +441,9 @@
 !                                                              If 'SPARSE  ', use value determined by parameter SPARSE_FLAVOR
 !                                                              defined in field 4 of the PARAM, SOLLIB entry
 
-      CHARACTER(  8*BYTE)      :: SPARSE_FLAVOR  = 'SUPERLU '! This denotes which SPARSE SOLLIB to use. Currently SuperLU is the
-!                                                              only option
+      CHARACTER(  8*BYTE)      :: SPARSE_FLAVOR  = 'QDLDL   '! This denotes which SPARSE SOLLIB to use.
+!                                                              'SUPERLU ' = SuperLU LU factorization
+!                                                              'QDLDL   ' = QDLDL LDL^T factorization with METIS ordering
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       INTEGER(LONG)            :: SORT_MAX       =     5     ! Max number of times to run sort algorithm before stopping with error.

@@ -42,6 +42,9 @@
                                          I_KLL, I2_KLL, J_KLL, KLL
 
 
+      USE SYM_MAT_DECOMP_QDLDL_Interface
+      USE FBS_QDLDL_Interface
+
       USE SOLVE_DLR_USE_IFs
 
       IMPLICIT NONE
@@ -107,6 +110,11 @@
 
             INFO = 0
             CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KLL', 'L ', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, INFO )
+
+         ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+            INFO = 0
+            CALL SYM_MAT_DECOMP_QDLDL ( SUBR_NAME, 'KLL', 'L ', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, INFO )
 
          ELSE
 
@@ -182,6 +190,11 @@
 
                   INFO = 0
                   CALL FBS_SUPRLU ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, J, INOUT_COL, INFO )
+
+               ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+                  INFO = 0
+                  CALL FBS_QDLDL ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, J, INOUT_COL, INFO )
 
                ELSE
 

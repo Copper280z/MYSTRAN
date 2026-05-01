@@ -43,6 +43,8 @@
       USE SPARSE_MATRICES, ONLY       :  I2_PHIZL1, I_PHIZL1, J_PHIZL1, PHIZL1, I2_PHIZL1t, I_PHIZL1t, J_PHIZL1t, PHIZL1t,         &
                                          I_KLL, I2_KLL, J_KLL, KLL, I_KLLs, I2_KLLs, J_KLLs, KLLs
 
+      USE FBS_QDLDL_Interface
+
       USE SOLVE_PHIZL1_USE_IFs
 
       IMPLICIT NONE
@@ -137,6 +139,12 @@
 
                   INFO = 0
                   CALL FBS_SUPRLU ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, J, INOUT_COL, INFO )
+
+               ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+                  INFO = 0
+                  CALL FBS_QDLDL ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, J, INOUT_COL, INFO )
+
                ELSE
 
                   FATAL_ERR = FATAL_ERR + 1

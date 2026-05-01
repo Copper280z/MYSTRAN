@@ -427,6 +427,17 @@ else()
   set(SLU_DRIVER "${SUPERLU_DIR}/FORTRAN/c_fortran_dgssv.c")
 endif()
 
+# QDLDL sparse LDL^T solver
+set(QDLDL_DIR "${PROJECT_SOURCE_DIR}/qdldl")
+include_directories("${QDLDL_DIR}/include")
+if(TPL_ENABLE_METISLIB)
+  include_directories("${TPL_METIS_INCLUDE_DIRS}")
+endif()
+set(QDLDL_SOURCES
+  "${QDLDL_DIR}/src/qdldl.c"
+  "${PROJECT_SOURCE_DIR}/c_fortran_qdldl.c"
+)
+
 # set some extra vars for MSYS builds to make the binary portable
 if(WIN32)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
@@ -452,6 +463,7 @@ add_executable(
   mystran
   ${ALL_FORTRAN_FILES}
   ${SLU_DRIVER}
+  ${QDLDL_SOURCES}
 )
 
 # determine which superlu variant to link against

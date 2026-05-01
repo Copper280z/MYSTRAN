@@ -31,4 +31,8 @@
          INTEGER(LONG)                :: SLU_INFO
          INTEGER(DBL_LONG)            :: SLU_FACTORS
 
+         ! Number of negative D diagonal entries from the last QDLDL factorization.
+         ! Equals the number of eigenvalues below the shift sigma (Sylvester's law).
+         INTEGER(LONG)                :: QDLDL_NEG_COUNT = 0
+
       END MODULE SuperLU_STUF

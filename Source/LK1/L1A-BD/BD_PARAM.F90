@@ -2603,15 +2603,17 @@
                   CALL LEFT_ADJ_BDFLD ( CHRPARM )
                   IF      (CHRPARM(1:7) == 'SUPERLU') THEN
                      SPARSE_FLAVOR = 'SUPERLU '
+                  ELSE IF (CHRPARM(1:5) == 'QDLDL') THEN
+                     SPARSE_FLAVOR = 'QDLDL   '
                   ELSE
                      WARN_ERR = WARN_ERR + 1
                      WRITE(ERR,101) CARD
-                     WRITE(ERR,1189) PARNAM,'Y OR N',CHRPARM,AUTOSPC_INFO
+                     WRITE(ERR,1189) PARNAM,'SUPERLU or QDLDL',CHRPARM,AUTOSPC_INFO
                      IF (SUPWARN == 'N') THEN
                         IF (ECHO == 'NONE  ') THEN
                            WRITE(F06,101) CARD
                         ENDIF
-                        WRITE(F06,1189) PARNAM,'Y OR N',CHRPARM,AUTOSPC_INFO
+                        WRITE(F06,1189) PARNAM,'SUPERLU or QDLDL',CHRPARM,AUTOSPC_INFO
                      ENDIF
                   ENDIF
                ENDIF

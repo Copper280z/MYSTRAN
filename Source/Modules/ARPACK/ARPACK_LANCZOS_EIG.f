@@ -7,14 +7,17 @@
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, SOL_NAME
       USE TIMDAT, ONLY                :  TSEC
       USE MODEL_STUF, ONLY            :  EIG_MSGLVL
-      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO
-      USE PARAMS, ONLY                :  SOLLIB
+      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO,
+     &                                   QDLDL_NEG_COUNT
+      USE PARAMS, ONLY                :  SOLLIB, SPARSE_FLAVOR
       USE ARPACK_UTIL
 
       USE OURTIM_Interface
       USE MATMULT_SFF_Interface
       USE ARPACK_INFO_MSG_Interface
       USE LINK_MESSAGE_Interface
+      USE SYM_MAT_DECOMP_QDLDL_Interface
+      USE FBS_QDLDL_Interface
 
       character(1*byte), parameter   :: cr13_a = char(13)
       CHARACTER(44*BYTE)             :: MODNAM1            ! Name to write to screen to describe module being run.
@@ -661,11 +664,16 @@ c
 
          IF(SOLLIB(1:6) == 'SPARSE') THEN
 
-            !todo not sure about MATIN_SET = 'L '
             SLU_INFO = 0
-            call SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME , 'KMSM',  'L ',
-     &                                   n, NTERM_KMSMn, I_KMSMn,
-     &                                   J_KMSMn,  KMSMn,  SLU_INFO )
+            IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+               call SYM_MAT_DECOMP_QDLDL ( SUBR_NAME , 'KMSM',  'L ',
+     &                                     n, NTERM_KMSMn, I_KMSMn,
+     &                                     J_KMSMn,  KMSMn,  SLU_INFO )
+            ELSE
+               call SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME , 'KMSM',  'L ',
+     &                                      n, NTERM_KMSMn, I_KMSMn,
+     &                                      J_KMSMn,  KMSMn,  SLU_INFO )
+            ENDIF
 
          ELSE
 
@@ -707,11 +715,16 @@ c
 
          IF(SOLLIB(1:6) == 'SPARSE') THEN
 
-            !todo not sure about MATIN_SET = 'L '
             SLU_INFO = 0
-            call SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME , 'KMSM',  'L ',
-     &                                   n, NTERM_KMSMn, I_KMSMn,
-     &                                   J_KMSMn,  KMSMn,  SLU_INFO )
+            IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+               call SYM_MAT_DECOMP_QDLDL ( SUBR_NAME , 'KMSM',  'L ',
+     &                                     n, NTERM_KMSMn, I_KMSMn,
+     &                                     J_KMSMn,  KMSMn,  SLU_INFO )
+            ELSE
+               call SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME , 'KMSM',  'L ',
+     &                                      n, NTERM_KMSMn, I_KMSMn,
+     &                                      J_KMSMn,  KMSMn,  SLU_INFO )
+            ENDIF
 
          ELSE
 
@@ -844,9 +857,15 @@ c
             IF(SOLLIB(1:6) == 'SPARSE') THEN
 
                SLU_INFO = 0
-               call FBS_SUPRLU ( SUBR_NAME, 'KMSMn', n,
-     &                        NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
-     &                        0, workd(ipntr(2)), SLU_INFO )
+               IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+                  call FBS_QDLDL ( SUBR_NAME, 'KMSMn', n,
+     &                          NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
+     &                          0, workd(ipntr(2)), SLU_INFO )
+               ELSE
+                  call FBS_SUPRLU ( SUBR_NAME, 'KMSMn', n,
+     &                           NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
+     &                           0, workd(ipntr(2)), SLU_INFO )
+               ENDIF
 
             ELSE
 
@@ -904,9 +923,15 @@ c
             IF(SOLLIB(1:6) == 'SPARSE') THEN
 
                SLU_INFO = 0
-               call FBS_SUPRLU ( SUBR_NAME, 'KMSMn', n,
-     &                        NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
-     &                        0, workd(ipntr(2)), SLU_INFO )
+               IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+                  call FBS_QDLDL ( SUBR_NAME, 'KMSMn', n,
+     &                          NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
+     &                          0, workd(ipntr(2)), SLU_INFO )
+               ELSE
+                  call FBS_SUPRLU ( SUBR_NAME, 'KMSMn', n,
+     &                           NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
+     &                           0, workd(ipntr(2)), SLU_INFO )
+               ENDIF
 
             ELSE
 
@@ -967,9 +992,15 @@ c
             IF(SOLLIB(1:6) == 'SPARSE') THEN
 
                SLU_INFO = 0
-               call FBS_SUPRLU ( SUBR_NAME, 'KMSMn', n,
-     &                        NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
-     &                        0, workd(ipntr(2)), SLU_INFO )
+               IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+                  call FBS_QDLDL ( SUBR_NAME, 'KMSMn', n,
+     &                          NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
+     &                          0, workd(ipntr(2)), SLU_INFO )
+               ELSE
+                  call FBS_SUPRLU ( SUBR_NAME, 'KMSMn', n,
+     &                           NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
+     &                           0, workd(ipntr(2)), SLU_INFO )
+               ENDIF
 
             ELSE
 
@@ -1008,9 +1039,15 @@ c
             IF(SOLLIB(1:6) == 'SPARSE') THEN
 
                SLU_INFO = 0
-               call FBS_SUPRLU ( SUBR_NAME, 'KMSMn', n,
-     &                        NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
-     &                        0, workd(ipntr(2)), SLU_INFO )
+               IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+                  call FBS_QDLDL ( SUBR_NAME, 'KMSMn', n,
+     &                          NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
+     &                          0, workd(ipntr(2)), SLU_INFO )
+               ELSE
+                  call FBS_SUPRLU ( SUBR_NAME, 'KMSMn', n,
+     &                           NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn,
+     &                           0, workd(ipntr(2)), SLU_INFO )
+               ENDIF
 
             ELSE
 

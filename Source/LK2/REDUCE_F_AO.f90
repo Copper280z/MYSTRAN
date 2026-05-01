@@ -148,7 +148,7 @@
 
             ENDIF
 
-FreeS:      IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the storage allocated inside SuperLU
+FreeS:      IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the storage allocated inside sparse solver
 
                IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
 
@@ -162,6 +162,20 @@ FreeS:      IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free th
                      WRITE (*,*) 'SUPERLU STORAGE FREED'
                   ELSE
                      WRITE(*,*) 'SUPERLU STORAGE NOT FREED. INFO FROM SUPERLU FREE STORAGE ROUTINE = ', SLU_INFO
+                  ENDIF
+
+               ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+                  DO J=1,NDOFO
+                     DUM_COL(J) = ZERO
+                  ENDDO
+
+                  CALL C_FORTRAN_QDLDL( 3, NDOFO, NTERM_KOO, 1, KOO , I_KOO , J_KOO , DUM_COL, NDOFO, SLU_FACTORS, SLU_INFO )
+
+                  IF (SLU_INFO .EQ. 0) THEN
+                     WRITE (*,*) 'QDLDL STORAGE FREED'
+                  ELSE
+                     WRITE(*,*) 'QDLDL STORAGE NOT FREED. INFO FROM QDLDL FREE STORAGE ROUTINE = ', SLU_INFO
                   ENDIF
 
                ENDIF

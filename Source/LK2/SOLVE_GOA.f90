@@ -43,6 +43,8 @@
 ! Interface module not needed for subr's DPBTRF and DPBTRS. These are "CONTAIN'ed" in module LAPACK_LIN_EQN_DPB, which
 ! is "USE'd" above
 
+      USE FBS_QDLDL_Interface
+
       USE SOLVE_GOA_USE_IFs
 
       IMPLICIT NONE
@@ -140,6 +142,11 @@
 
                   INFO = 0
                   CALL FBS_SUPRLU ( SUBR_NAME, 'KOO', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, J, INOUT_COL, INFO )
+
+               ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+                  INFO = 0
+                  CALL FBS_QDLDL ( SUBR_NAME, 'KOO', NDOFO, NTERM_KOO, I_KOO, J_KOO, KOO, J, INOUT_COL, INFO )
 
                ELSE
 

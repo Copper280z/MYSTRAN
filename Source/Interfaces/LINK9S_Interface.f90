@@ -45,7 +45,7 @@
                                          MPUSERIN, MUSERIN_MAT_NAMES, MMATL, MPSOLID, NEDAT, NBAROFF, NBUSHOFF, NELE, NGRID,       &
                                          NMATANGLE, NMATL, NPBAR, NPBEAM, NPBUSH, NPCOMP, NPCARD, NPDAT, NPELAS, NPROD, NPSHEAR,   &
                                          NPSHEL, NPSOLID, NPLATEOFF, NPLATETHICK, NPLOAD4_3D, NPUSER1, NPUSERIN, NSEQ, NSUB,       &
-                                         NTCARD, NTDAT, NTSUB, NVVEC, SOL_NAME
+                                         NTCARD, NTDAT, NTSUB, NVVEC, RESTART, SOL_NAME
 
       USE TIMDAT, ONLY                :  TSEC
       USE PARAMS, ONLY                :  CBMIN3, CBMIN4, IORQ1M, IORQ1S, IORQ1B, IORQ2B, IORQ2T
@@ -68,4 +68,3 @@
    END INTERFACE
 
    END MODULE LINK9S_Interface
-

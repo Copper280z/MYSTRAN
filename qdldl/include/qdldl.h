@@ -112,8 +112,7 @@ QDLDL_API QDLDL_int QDLDL_etree(const QDLDL_int n, const QDLDL_int* Ap, const QD
  * @param  Ai     row indices of A.  Has Ap[n] elements (not modified)
  * @param  Ax     data of A.  Has Ap[n] elements (not modified)
  * @param  Lp     column pointers (size n+1) for columns of L
- * @param  Li     row indices of L.  Has Lp[n] elements. MYSTRAN patches this
- *                to int32 because row indices are bounded by n.
+ * @param  Li     row indices of L.  Has Lp[n] elements.
  * @param  Lx     data of L.  Has Lp[n] elements
  * @param  D      vectorized factor D.  Length is n
  * @param  Dinv   reciprocal of D.  Length is n
@@ -128,12 +127,14 @@ QDLDL_API QDLDL_int QDLDL_etree(const QDLDL_int n, const QDLDL_int* Ap, const QD
  *                of D evaluates exactly to zero (matrix is not quasidefinite
  *                or otherwise LDL factorisable)
  *
+ * Bob Day - 5/1/2026 
+ * This function has been patched to keep row indices as an int
  */
 QDLDL_API QDLDL_int QDLDL_factor(const QDLDL_int n, const QDLDL_int* Ap, const QDLDL_int* Ai,
-                                 const QDLDL_float* Ax, QDLDL_int* Lp, int* Li,
-                                 QDLDL_float* Lx, QDLDL_float* D, QDLDL_float* Dinv,
-                                 const QDLDL_int* Lnz, const QDLDL_int* etree, QDLDL_bool* bwork,
-                                 QDLDL_int* iwork, QDLDL_float* fwork);
+                                 const QDLDL_float* Ax, QDLDL_int* Lp, int* Li, QDLDL_float* Lx,
+                                 QDLDL_float* D, QDLDL_float* Dinv, const QDLDL_int* Lnz,
+                                 const QDLDL_int* etree, QDLDL_bool* bwork, QDLDL_int* iwork,
+                                 QDLDL_float* fwork);
 
 
 /**
@@ -150,7 +151,7 @@ QDLDL_API QDLDL_int QDLDL_factor(const QDLDL_int n, const QDLDL_int* Ap, const Q
   * @param  x      initialized to b.  Equal to x on return
   *
   */
-QDLDL_API void QDLDL_solve(const QDLDL_int n, const QDLDL_int* Lp, const QDLDL_int* Li,
+QDLDL_API void QDLDL_solve(const QDLDL_int n, const QDLDL_int* Lp, const int* Li,
                            const QDLDL_float* Lx, const QDLDL_float* Dinv, QDLDL_float* x);
 
 
@@ -167,7 +168,7 @@ QDLDL_API void QDLDL_solve(const QDLDL_int n, const QDLDL_int* Lp, const QDLDL_i
  * @param  x      initialized to b.  Equal to x on return
  *
  */
-QDLDL_API void QDLDL_Lsolve(const QDLDL_int n, const QDLDL_int* Lp, const QDLDL_int* Li,
+QDLDL_API void QDLDL_Lsolve(const QDLDL_int n, const QDLDL_int* Lp, const int* Li,
                             const QDLDL_float* Lx, QDLDL_float* x);
 
 
@@ -184,7 +185,7 @@ QDLDL_API void QDLDL_Lsolve(const QDLDL_int n, const QDLDL_int* Lp, const QDLDL_
  * @param  x      initialized to b.  Equal to x on return
  *
  */
-QDLDL_API void QDLDL_Ltsolve(const QDLDL_int n, const QDLDL_int* Lp, const QDLDL_int* Li,
+QDLDL_API void QDLDL_Ltsolve(const QDLDL_int n, const QDLDL_int* Lp, const int* Li,
                              const QDLDL_float* Lx, QDLDL_float* x);
 
 #ifdef __cplusplus

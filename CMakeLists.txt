@@ -239,7 +239,7 @@ if(TPL_ENABLE_METISLIB)
 endif()
 set(QDLDL_SOURCES
   "${QDLDL_DIR}/src/qdldl.c"
-  "${PROJECT_SOURCE_DIR}/c_fortran_qdldl.c"
+  "${QDLDL_DIR}/fortran/c_fortran_qdldl.c"
 )
 
 # f2c stuff

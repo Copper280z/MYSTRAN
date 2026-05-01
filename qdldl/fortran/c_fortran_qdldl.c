@@ -1,4 +1,5 @@
 /*
+ * Bob Day - 5/1/2026
  * Fortran-callable interface to QDLDL (LDL^T sparse factorization).
  *
  * Matches the iopt-based interface of c_fortran_dgssv so callers can switch
@@ -29,7 +30,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "qdldl/include/qdldl.h"
+#include "qdldl.h"
 
 #if (HAVE_METIS)
 #include "metis.h"

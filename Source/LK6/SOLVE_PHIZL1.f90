@@ -44,6 +44,8 @@
                                          I_KLL, I2_KLL, J_KLL, KLL, I_KLLs, I2_KLLs, J_KLLs, KLLs
       USE LAPACK_LIN_EQN_DPB
 
+      USE FBS_QDLDL_Interface
+
       USE SOLVE_PHIZL1_USE_IFs
 
       IMPLICIT NONE
@@ -138,6 +140,12 @@
 
                   INFO = 0
                   CALL FBS_SUPRLU ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, J, INOUT_COL, INFO )
+
+               ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+                  INFO = 0
+                  CALL FBS_QDLDL ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, J, INOUT_COL, INFO )
+
                ELSE
 
                   FATAL_ERR = FATAL_ERR + 1

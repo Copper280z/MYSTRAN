@@ -277,6 +277,8 @@
       USE FULL_MATRICES, ONLY         :  RMM_FULL
       USE LAPACK_LIN_EQN_DGE
       USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO
+      USE SYM_MAT_DECOMP_QDLDL_Interface
+      USE FBS_QDLDL_Interface
 
 ! Interface module not needed for subr's DGETRF and DGETRS. These are "CONTAIN'ed" in module LAPACK_LIN_EQN_DPB, which
 ! is "USE'd" above
@@ -368,6 +370,11 @@
             CALL SPARSE_CRS_SPARSE_CCS ( NDOFM, NDOFM, NTERM_RMM, 'RMM', I_RMM, J_RMM, RMM, 'CCS1', J_CCS1, I_CCS1, CCS1, 'Y')
             CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, SLU_INFO )
 
+         ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+            SLU_INFO = 0
+            CALL SYM_MAT_DECOMP_QDLDL ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, I_RMM, J_RMM, RMM, SLU_INFO )
+
          ELSE
 
             FATAL_ERR = FATAL_ERR + 1
@@ -452,6 +459,11 @@
                   SLU_INFO = 0
                   CALL FBS_SUPRLU ( SUBR_NAME, 'RMM', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, J, RMN_COL, SLU_INFO )
 
+               ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+                  SLU_INFO = 0
+                  CALL FBS_QDLDL ( SUBR_NAME, 'RMM', NDOFM, NTERM_RMM, I_RMM, J_RMM, RMM, J, RMN_COL, SLU_INFO )
+
                ELSE
 
                   FATAL_ERR = FATAL_ERR + 1
@@ -489,7 +501,7 @@
       CALL DEALLOCATE_SCR_MAT ( 'CCS1' )
       CALL DEALLOCATE_FULL_MAT ( 'RMM_FULL' )
 
-FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the storage allocated inside SuperLU
+FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the storage allocated inside sparse solver
 
          IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
 
@@ -503,6 +515,20 @@ FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the stor
                WRITE (*,*) 'SUPERLU STORAGE FREED'
             ELSE
                WRITE(*,*) 'SUPERLU STORAGE NOT FREED. INFO FROM SUPERLU FREE STORAGE ROUTINE = ', SLU_INFO
+            ENDIF
+
+         ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+            DO J=1,NDOFM
+               DUM_COL(J) = ZERO
+            ENDDO
+
+            CALL C_FORTRAN_QDLDL( 3, NDOFM, NTERM_RMM, 1, RMM, I_RMM, J_RMM, DUM_COL, NDOFM, SLU_FACTORS, SLU_INFO )
+
+            IF (SLU_INFO .EQ. 0) THEN
+               WRITE (*,*) 'QDLDL STORAGE FREED'
+            ELSE
+               WRITE(*,*) 'QDLDL STORAGE NOT FREED. INFO FROM QDLDL FREE STORAGE ROUTINE = ', SLU_INFO
             ENDIF
 
          ENDIF

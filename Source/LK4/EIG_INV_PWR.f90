@@ -46,6 +46,8 @@
 
       USE EIG_INV_PWR_USE_IFs
       USE LINK_MESSAGE_Interface
+      USE SYM_MAT_DECOMP_QDLDL_Interface
+      USE FBS_QDLDL_Interface
 
       IMPLICIT NONE
 
@@ -137,6 +139,11 @@
             INFO = 0
             CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KMSM', 'L ', NDOFL, NTERM_KMSM, I_KMSM, J_KMSM, KMSM, INFO )
 
+         ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+            INFO = 0
+            CALL SYM_MAT_DECOMP_QDLDL ( SUBR_NAME, 'KMSM', 'L ', NDOFL, NTERM_KMSM, I_KMSM, J_KMSM, KMSM, INFO )
+
          ELSE
 
             FATAL_ERR = FATAL_ERR + 1
@@ -216,6 +223,16 @@ iters:DO
                   CALL FBS_SUPRLU ( SUBR_NAME, 'KLLD', NDOFL, NTERM_KLLD, I_KLLD, J_KLLD, KLLD, ITER_NUM, MVEC, INFO )
                ELSE
                   CALL FBS_SUPRLU ( SUBR_NAME, 'KLL' , NDOFL, NTERM_KLL , I_KLL , J_KLL , KLL , ITER_NUM, MVEC, INFO )
+               ENDIF
+
+            ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+               INFO = 0
+
+               IF (SOL_NAME(1:8) == 'BUCKLING') THEN
+                  CALL FBS_QDLDL ( SUBR_NAME, 'KLLD', NDOFL, NTERM_KLLD, I_KLLD, J_KLLD, KLLD, ITER_NUM, MVEC, INFO )
+               ELSE
+                  CALL FBS_QDLDL ( SUBR_NAME, 'KLL' , NDOFL, NTERM_KLL , I_KLL , J_KLL , KLL , ITER_NUM, MVEC, INFO )
                ENDIF
 
             ELSE

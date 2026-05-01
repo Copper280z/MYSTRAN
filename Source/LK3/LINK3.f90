@@ -55,6 +55,8 @@
 
 !     USE LINK3_USE_IFs
       USE LINK_MESSAGE_Interface
+      USE SYM_MAT_DECOMP_QDLDL_Interface
+      USE FBS_QDLDL_Interface
 
       IMPLICIT NONE
 
@@ -187,6 +189,11 @@ Factr:IF (SOLLIB == 'BANDED  ') THEN                       ! Use LAPACK
             SLU_INFO = 0
             CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KLL', L_SET, NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, SLU_INFO )
 
+         ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+            SLU_INFO = 0
+            CALL SYM_MAT_DECOMP_QDLDL ( SUBR_NAME, 'KLL', L_SET, NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, SLU_INFO )
+
          ELSE
 
             FATAL_ERR = FATAL_ERR + 1
@@ -257,6 +264,11 @@ Solve:DO ISUB = 1,NSUB
 
                SLU_INFO = 0
                CALL FBS_SUPRLU ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, ISUB, DUM_COL, SLU_INFO )
+
+            ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+               SLU_INFO = 0
+               CALL FBS_QDLDL ( SUBR_NAME, 'KLL', NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL, ISUB, DUM_COL, SLU_INFO )
 
             ELSE
 
@@ -329,8 +341,8 @@ FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the stor
 
          IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
 
-            DO J=1,NDOFL                                         ! Need a null col of loads when SuperLU is called to factor KLL
-               DUM_COL(J) = ZERO                                  ! (only because it appears in the calling list)
+            DO J=1,NDOFL
+               DUM_COL(J) = ZERO
             ENDDO
 
             CALL C_FORTRAN_DGSSV( 3, NDOFL, NTERM_KLL, 1, KLL , I_KLL , J_KLL , DUM_COL, NDOFL, SLU_FACTORS, SLU_INFO )
@@ -339,6 +351,20 @@ FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the stor
                WRITE (*,*) 'SUPERLU STORAGE FREED'
             ELSE
                WRITE(*,*) 'SUPERLU STORAGE NOT FREED. INFO FROM SUPERLU FREE STORAGE ROUTINE = ', SLU_INFO
+            ENDIF
+
+         ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+
+            DO J=1,NDOFL
+               DUM_COL(J) = ZERO
+            ENDDO
+
+            CALL C_FORTRAN_QDLDL( 3, NDOFL, NTERM_KLL, 1, KLL , I_KLL , J_KLL , DUM_COL, NDOFL, SLU_FACTORS, SLU_INFO )
+
+            IF (SLU_INFO .EQ. 0) THEN
+               WRITE (*,*) 'QDLDL STORAGE FREED'
+            ELSE
+               WRITE(*,*) 'QDLDL STORAGE NOT FREED. INFO = ', SLU_INFO
             ENDIF
 
          ENDIF

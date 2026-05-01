@@ -46,14 +46,14 @@
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO, ONE, TWO, PI
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
-      USE PARAMS, ONLY                :  ARP_TOL, BAILOUT, EPSIL, MXITERL, SOLLIB, SPARSTOR, SUPINFO, SUPWARN
+      USE PARAMS, ONLY                :  ARP_TOL, BAILOUT, EPSIL, MXITERL, SOLLIB, SPARSE_FLAVOR, SPARSTOR, SUPINFO, SUPWARN
       USE DOF_TABLES, ONLY            :  TDOFI
       USE EIGEN_MATRICES_1, ONLY      :  EIGEN_VAL, EIGEN_VEC, MODE_NUM
       USE MODEL_STUF, ONLY            :  EIG_FRQ1, EIG_FRQ2, EIG_LAP_MAT_TYPE, EIG_N2, EIG_NCVFACL
       USE ARPACK_MATRICES_1, ONLY     :  IWORK, RESID, RFAC, SELECT, VBAS, WORKD, WORKL
       USE SPARSE_MATRICES, ONLY       :  I_KLL, J_KLL, KLL, I_MLL, J_MLL, MLL, SYM_KLL, SYM_MLL,                                   &
                                          I_KMSM, J_KMSM, KMSM, I_KMSMn, J_KMSMn, KMSMn
-      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO
+      USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO, QDLDL_NEG_COUNT
 
       USE ARPACK_LANCZOS_EIG
       USE LAPACK_LIN_EQN_DPB
@@ -62,6 +62,8 @@
       USE EIG_LANCZOS_ARPACK_ADAPTIVE_USE_IFs
       USE DSBAND_PREFAC_Interface
       USE SYM_MAT_DECOMP_SUPRLU_Interface
+      USE SYM_MAT_DECOMP_QDLDL_Interface
+      USE FBS_QDLDL_Interface
       USE LINK_MESSAGE_Interface
 
       IMPLICIT NONE
@@ -280,15 +282,23 @@
       CALL ALLOCATE_LAPACK_MAT ( 'IWORK', NDOFL, 1, SUBR_NAME )
 
       IF (SOLLIB(1:6) == 'SPARSE') THEN
-         ! Factor using SuperLU - factorization stored in SLU_FACTORS
          SLU_INFO = 0
-         CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KMSM', 'L ',                                                                     &
-                                      NDOFL, NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn, SLU_INFO )
+         IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+            CALL SYM_MAT_DECOMP_QDLDL ( SUBR_NAME, 'KMSM', 'L ',                                                                    &
+                                        NDOFL, NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn, SLU_INFO )
+         ELSE
+            CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KMSM', 'L ',                                                                   &
+                                         NDOFL, NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn, SLU_INFO )
+         ENDIF
          IF (SLU_INFO /= 0) THEN
             WRITE(ERR,9903) SLU_INFO, SUBR_NAME
             WRITE(F06,9903) SLU_INFO, SUBR_NAME
             FATAL_ERR = FATAL_ERR + 1
             CALL OUTA_HERE ( 'Y' )
+         ENDIF
+         IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+            WRITE(F06,1050) QDLDL_NEG_COUNT, EIG_FRQ1, EIG_FRQ2
+            IF (SUPINFO == 'N') WRITE(SC1,1050) QDLDL_NEG_COUNT, EIG_FRQ1, EIG_FRQ2
          ENDIF
       ELSE
          ! BANDED solver: copy KMSM to RFAC in band format, then factor
@@ -681,10 +691,19 @@
 ! **********************************************************************************************************************************
 ! Cleanup
 
-! Free SuperLU factorization (for SPARSE solver)
+      IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+         WRITE(F06,1051) NUM_EIGENS
+         IF (SUPINFO == 'N') WRITE(SC1,1051) NUM_EIGENS
+      ENDIF
+
+! Free sparse factorization storage
       IF (SOLLIB(1:6) == 'SPARSE') THEN
          DUM_COL(1) = ZERO
-         CALL C_FORTRAN_DGSSV ( 3, NDOFL, NTERM_KMSMn, 1, KMSMn, J_KMSMn, I_KMSMn, DUM_COL, NDOFL, SLU_FACTORS, SLU_INFO )
+         IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
+            CALL C_FORTRAN_QDLDL ( 3, NDOFL, NTERM_KMSMn, 1, KMSMn, J_KMSMn, I_KMSMn, DUM_COL, NDOFL, SLU_FACTORS, SLU_INFO )
+         ELSE
+            CALL C_FORTRAN_DGSSV ( 3, NDOFL, NTERM_KMSMn, 1, KMSMn, J_KMSMn, I_KMSMn, DUM_COL, NDOFL, SLU_FACTORS, SLU_INFO )
+         ENDIF
       ENDIF
 
       WRITE(SC1,12345,ADVANCE='NO') '       Deallocate KMSMn ', CR13
@@ -826,6 +845,12 @@
  9104 FORMAT(' *WARNING 9104: NO EIGENVALUES FOUND IN THE FREQUENCY RANGE ',F12.4,' Hz TO ',F12.4,' Hz')
 
  9892 FORMAT('               THIS IS FOR ROW AND COL IN THE MATRIX FOR GRID POINT ',I8,' COMPONENT ',I3)
+
+ 1050 FORMAT(' *INFORMATION: QDLDL D-MATRIX INERTIA: ',I8,' eigenvalue(s) below sigma.',                                              &
+             /,'               Frequency range: [',F12.4,' Hz, ',F12.4,' Hz]',                                                        &
+             /,'               (eigenvalue count from D diagonal, by Sylvester law of inertia)')
+
+ 1051 FORMAT(' *INFORMATION: ARPACK found ',I8,' eigenvalue(s) in the frequency range.')
 
  9903 FORMAT(' *ERROR  9903: SUPERLU SPARSE SOLVER HAS FAILED WITH INFO = ', I12,' IN SUBR ', A)
 

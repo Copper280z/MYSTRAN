@@ -231,6 +231,17 @@ else()
   set(SLU_DRIVER "${SUPERLU_DIR}/FORTRAN/c_fortran_dgssv.c")
 endif()
 
+# QDLDL sparse LDL^T solver
+set(QDLDL_DIR "${PROJECT_SOURCE_DIR}/qdldl")
+include_directories("${QDLDL_DIR}/include")
+if(TPL_ENABLE_METISLIB)
+  include_directories("${TPL_METIS_INCLUDE_DIRS}")
+endif()
+set(QDLDL_SOURCES
+  "${QDLDL_DIR}/src/qdldl.c"
+  "${PROJECT_SOURCE_DIR}/c_fortran_qdldl.c"
+)
+
 # f2c stuff
 set(F2C_DIR "${PROJECT_SOURCE_DIR}/f2c")
 set(F2C_INCLUDE_DIR "${F2C_DIR}/include")
@@ -384,6 +395,7 @@ add_executable(
   mystran
   ${ALL_FORTRAN_FILES}
   ${SLU_DRIVER}
+  ${QDLDL_SOURCES}
   ${missing_blas_src}
 )
 
@@ -403,6 +415,11 @@ if(USE_SUPERLU_MT)
   endif()
 else()
   target_link_libraries(mystran superlu f2c)
+
+  if(TPL_ENABLE_METISLIB)
+    target_compile_definitions(mystran PRIVATE HAVE_METIS)
+    target_link_libraries(mystran metis GKlib)
+  endif()
 endif()
 
 set_target_properties(

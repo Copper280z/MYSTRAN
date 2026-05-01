@@ -162,6 +162,7 @@
 
       IERROR = 0
 !xx   WRITE(SC1, * )                                       ! Advance 1 line for screen messages
+      CALL TDOF_COL_NUM ( 'G ',  G_SET_COL_NUM )
       CALL COUNTER_INIT('     Calculating stiff matrix. Process elem  ', NELE)
       elems:DO I=1,NELE
 
@@ -231,7 +232,6 @@
             ROW_NUM_START = TDOF_ROW_START(IGRID)
             CALL GET_GRID_NUM_COMPS ( IGRID, NUM_COMPS, SUBR_NAME )
             DO K = 1,NUM_COMPS
-               CALL TDOF_COL_NUM ( 'G ',  G_SET_COL_NUM )
                TDOF_ROW_NUM       = ROW_NUM_START + K - 1
                EDOF_ROW_NUM       = EDOF_ROW_NUM + 1
                EDOF(EDOF_ROW_NUM) = TDOF(TDOF_ROW_NUM, G_SET_COL_NUM)
@@ -478,37 +478,8 @@ stfpnt0:          DO                                       ! so, run this loop u
          CALL DEALLOCATE_TEMPLATE
       ENDIF
 
-! Open a scratch file that will be used to write array STF3 so that we can deallocate them and then reallocate them with the exact
-! amount of memory they need (so we do have wasted memory going into subr SPARSE_KGG)
-
-      SCRFIL(1:)  = ' '
-      SCRFIL(1:9) = 'SCRATCH-991'
-      OPEN (SCR(1),STATUS='SCRATCH',POSITION='REWIND',FORM='UNFORMATTED',ACTION='READWRITE',IOSTAT=IOCHK)
-      IF (IOCHK /= 0) THEN
-         CALL OPNERR ( IOCHK, SCRFIL, OUNT )
-         CALL FILE_CLOSE ( SCR(1), SCRFIL, 'DELETE' )
-         CALL OUTA_HERE ( 'Y' )
-      ENDIF
-      REWIND (SCR(1))
-
-      DO I=1,NTERM
-         WRITE(SCR(1)) STF3(I)
-      ENDDO
-      CALL DEALLOCATE_STF_ARRAYS ( 'STF3' )
-
-      CALL ALLOCATE_STF_ARRAYS ( 'STF3', SUBR_NAME )
-
-      REWIND (SCR(1))
-      DO I=1,NTERM
-         READ(SCR(1),IOSTAT=IOCHK) STF3(I)
-         IF (IOCHK /= 0) THEN
-            REC_NO = J
-            CALL READERR ( IOCHK, SCRFIL, 'SCR FILE WITH STF3', REC_NO, OUNT )
-            CALL FILE_CLOSE ( SCR(1), SCRFIL, 'DELETE' )
-            CALL OUTA_HERE ( 'Y' )                         ! Error reading scratch file, so quit
-         ENDIF
-      ENDDO
-      CALL FILE_CLOSE (SCR(1), SCRFIL, 'DELETE' )
+! Keep the over-allocated STF3 workspace through SPARSE_KGG. Repacking it through a scratch file saves memory but costs a large
+! sequential write/read and a second initialization of the same large array.
 
 ! Reset LTERM and NTERM to appropriate values
 

@@ -92,7 +92,7 @@ QDLDL_int QDLDL_etree(const QDLDL_int n, const QDLDL_int* Ap, const QDLDL_int* A
 
 
 QDLDL_int QDLDL_factor(const QDLDL_int n, const QDLDL_int* Ap, const QDLDL_int* Ai,
-                       const QDLDL_float* Ax, QDLDL_int* Lp, QDLDL_int* Li, QDLDL_float* Lx,
+                       const QDLDL_float* Ax, QDLDL_int* Lp, int* Li, QDLDL_float* Lx,
                        QDLDL_float* D, QDLDL_float* Dinv, const QDLDL_int* Lnz,
                        const QDLDL_int* etree, QDLDL_bool* bwork, QDLDL_int* iwork,
                        QDLDL_float* fwork) {
@@ -228,7 +228,7 @@ QDLDL_int QDLDL_factor(const QDLDL_int n, const QDLDL_int* Ap, const QDLDL_int* 
             // Now I have the cidx^th element of y = L\b.
             // so compute the corresponding element of
             // this row of L and put it into the right place
-            Li[tmpIdx] = k;
+            Li[tmpIdx] = (int)k;
             Lx[tmpIdx] = yVals_cidx * Dinv[cidx];
 
             // D[k] -= yVals[cidx]*yVals[cidx]*Dinv[cidx];

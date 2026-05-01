@@ -112,7 +112,8 @@ QDLDL_API QDLDL_int QDLDL_etree(const QDLDL_int n, const QDLDL_int* Ap, const QD
  * @param  Ai     row indices of A.  Has Ap[n] elements (not modified)
  * @param  Ax     data of A.  Has Ap[n] elements (not modified)
  * @param  Lp     column pointers (size n+1) for columns of L
- * @param  Li     row indices of L.  Has Lp[n] elements
+ * @param  Li     row indices of L.  Has Lp[n] elements. MYSTRAN patches this
+ *                to int32 because row indices are bounded by n.
  * @param  Lx     data of L.  Has Lp[n] elements
  * @param  D      vectorized factor D.  Length is n
  * @param  Dinv   reciprocal of D.  Length is n
@@ -129,7 +130,7 @@ QDLDL_API QDLDL_int QDLDL_etree(const QDLDL_int n, const QDLDL_int* Ap, const QD
  *
  */
 QDLDL_API QDLDL_int QDLDL_factor(const QDLDL_int n, const QDLDL_int* Ap, const QDLDL_int* Ai,
-                                 const QDLDL_float* Ax, QDLDL_int* Lp, QDLDL_int* Li,
+                                 const QDLDL_float* Ax, QDLDL_int* Lp, int* Li,
                                  QDLDL_float* Lx, QDLDL_float* D, QDLDL_float* Dinv,
                                  const QDLDL_int* Lnz, const QDLDL_int* etree, QDLDL_bool* bwork,
                                  QDLDL_int* iwork, QDLDL_float* fwork);

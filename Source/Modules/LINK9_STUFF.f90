@@ -38,6 +38,8 @@
       CHARACTER( 4*BYTE), ALLOCATABLE :: FTNAME(:)             ! Stress failure index name output with stresses/strains
 
       INTEGER(LONG)                   :: MAXREQ                ! Max number of rows needed for array OGEL
+      INTEGER(LONG)                   :: STRE_OUT_CACHE_ROWS = 0
+      INTEGER(LONG)                   :: STRN_OUT_CACHE_ROWS = 0
 
       INTEGER(LONG)     , ALLOCATABLE :: GID_OUT_ARRAY(:,:)    ! Array of integer grid no's for some output in LINK9
 
@@ -46,11 +48,20 @@
 
       INTEGER(LONG)     , ALLOCATABLE :: POLY_FIT_ERR_INDEX(:)! Index num for POLY_FIT_ERR (i.e. which of the 1 through 9 stress
 !                                                                or strain values has the largest error in polynomial fit
+      INTEGER(LONG)     , ALLOCATABLE :: STRE_OUT_CACHE_ERR_INDEX(:)
+      INTEGER(LONG)     , ALLOCATABLE :: STRN_OUT_CACHE_ERR_INDEX(:)
 
 
       REAL(DOUBLE)      , ALLOCATABLE :: OGEL(:,:)             ! Master array for holding outputs in LINK9 until they are printed
 
       REAL(DOUBLE)      , ALLOCATABLE :: POLY_FIT_ERR(:)       ! Array of polynom fit errors for elems that extrapolate stress or
 !                                                                strain values from one set of output points to another
+      REAL(DOUBLE)      , ALLOCATABLE :: STRE_OUT_CACHE(:,:)   ! Cached final stress vectors from engineering-force recovery
+      REAL(DOUBLE)      , ALLOCATABLE :: STRE_OUT_CACHE_ERR(:)
+      REAL(DOUBLE)      , ALLOCATABLE :: STRN_OUT_CACHE(:,:)   ! Cached final strain vectors from stress recovery
+      REAL(DOUBLE)      , ALLOCATABLE :: STRN_OUT_CACHE_ERR(:)
+
+      CHARACTER(1*BYTE)               :: STRE_OUT_CACHE_VALID = 'N'
+      CHARACTER(1*BYTE)               :: STRN_OUT_CACHE_VALID = 'N'
 
       END MODULE LINK9_STUFF

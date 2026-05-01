@@ -37,6 +37,7 @@
       USE LINK9_STUFF, ONLY           :  MAXREQ, OGEL
 
       USE OFP3_USE_IFs
+      USE LINK_MESSAGE_Interface
 
       IMPLICIT NONE
 
@@ -74,27 +75,31 @@
 ! 02/12/2020: Comment out the IF tests. Some of the routines have to be run if there are ELDATA requests to write to file .BUG
 
       OT4_EROW = 0
-!      IF (ANY_ELFN_OUTPUT > 0) THEN
+      IF (ANY_ELFN_OUTPUT > 0) THEN
+         CALL LINK_MESSAGE('  OFP3 element nodal forces')
          CALL OFP3_ELFN          ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )
-!     ENDIF
+      ENDIF
 
       OT4_EROW = 0
-!     IF (ANY_ELFE_OUTPUT > 0) THEN
+      IF (ANY_ELFE_OUTPUT > 0) THEN
+         CALL LINK_MESSAGE('  OFP3 element engineering forces')
          CALL OFP3_ELFE_1D       ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )  ! OEF1X1, OEF1, OEF1X
          CALL OFP3_ELFE_2D       ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )  ! OEF1C, OEF1X1, OEF1, OEF1X
-!     ENDIF
+      ENDIF
 
       OT4_EROW = 0
-!     IF (ANY_STRE_OUTPUT > 0) THEN
+      IF (ANY_STRE_OUTPUT > 0) THEN
+         CALL LINK_MESSAGE('  OFP3 element stresses')
          CALL OFP3_STRE_PCOMP    ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )  ! OES1C
          CALL OFP3_STRE_NO_PCOMP ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )  ! OES1X1, OES1, OES1X,
-!     ENDIF
+      ENDIF
 
       OT4_EROW = 0
-!     IF (ANY_STRN_OUTPUT > 0) THEN
+      IF (ANY_STRN_OUTPUT > 0) THEN
+         CALL LINK_MESSAGE('  OFP3 element strains')
          CALL OFP3_STRN_PCOMP    ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )  ! OSTR1C
          CALL OFP3_STRN_NO_PCOMP ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )  ! OSTR1X, OSTR1
-!     ENDIF
+      ENDIF
 
 ! **********************************************************************************************************************************
       DO I=1,MERROR

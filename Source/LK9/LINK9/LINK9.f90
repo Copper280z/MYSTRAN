@@ -85,7 +85,7 @@
       USE MODEL_STUF, ONLY            :  ANY_ACCE_OUTPUT, ANY_DISP_OUTPUT, ANY_MPCF_OUTPUT, ANY_SPCF_OUTPUT, ANY_OLOA_OUTPUT,      &
                                          ANY_GPFO_OUTPUT, ANY_ELFE_OUTPUT, ANY_ELFN_OUTPUT, ANY_STRE_OUTPUT, ANY_STRN_OUTPUT,      &
                                          OELDT, OELOUT, OGROUT, GRID, GROUT, MEFFMASS_CALC, MPFACTOR_CALC, SCNUM, SUBLOD, TITLE,   &
-                                         STITLE, LABEL, ETYPE
+                                         STITLE, LABEL, EDAT, EOFF, EPNT, ESORT1, ESORT2, ETYPE
       USE LINK9_STUFF, ONLY           :  MAXREQ
 
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
@@ -262,7 +262,9 @@
 
       ! Before reading file data in subr LINK9S, deallocate all of those arrays and then allocate them fresh
       CALL LINK_MESSAGE('DEALLOCATE ARRAYS BEFORE READING LINK9S')
-      L1G_IN_MEMORY = ALLOCATED(ETYPE)
+      L1G_IN_MEMORY = (RESTART == 'N') .AND. (SOL_NAME(1:7) == 'STATICS') .AND.                                           &
+                     & ALLOCATED(ETYPE) .AND. ALLOCATED(EDAT) .AND. ALLOCATED(EPNT) .AND. ALLOCATED(ESORT1) .AND.          &
+                     & ALLOCATED(ESORT2) .AND. ALLOCATED(EOFF)
                                                            ! Deallocate data in file LINK1D
       CALL DEALLOCATE_MODEL_STUF ( 'SCNUM' )
       CALL DEALLOCATE_MODEL_STUF ( 'TITLES' )

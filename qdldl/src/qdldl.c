@@ -29,6 +29,7 @@
 
 /* Compute the elimination tree for a quasidefinite matrix
  * in compressed sparse column form.
+ * This function has been patched to keep row indices as an int
  */
 QDLDL_int QDLDL_etree(const QDLDL_int n, const QDLDL_int* Ap, const QDLDL_int* Ai, QDLDL_int* work,
                       QDLDL_int* Lnz, QDLDL_int* etree) {
@@ -262,7 +263,7 @@ QDLDL_int QDLDL_factor(const QDLDL_int n, const QDLDL_int* Ap, const QDLDL_int* 
 }
 
 // Solves (L+I)x = b
-void QDLDL_Lsolve(const QDLDL_int n, const QDLDL_int* Lp, const QDLDL_int* Li,
+void QDLDL_Lsolve(const QDLDL_int n, const QDLDL_int* Lp, const int* Li,
                   const QDLDL_float* Lx, QDLDL_float* x) {
     QDLDL_int i = 0;
     QDLDL_int j = 0;
@@ -277,7 +278,7 @@ void QDLDL_Lsolve(const QDLDL_int n, const QDLDL_int* Lp, const QDLDL_int* Li,
 }
 
 // Solves (L+I)'x = b
-void QDLDL_Ltsolve(const QDLDL_int n, const QDLDL_int* Lp, const QDLDL_int* Li,
+void QDLDL_Ltsolve(const QDLDL_int n, const QDLDL_int* Lp, const int* Li,
                    const QDLDL_float* Lx, QDLDL_float* x) {
     QDLDL_int i = 0;
     QDLDL_int j = 0;
@@ -293,7 +294,7 @@ void QDLDL_Ltsolve(const QDLDL_int n, const QDLDL_int* Lp, const QDLDL_int* Li,
 }
 
 // Solves Ax = b where A has given LDL factors
-void QDLDL_solve(const QDLDL_int n, const QDLDL_int* Lp, const QDLDL_int* Li, const QDLDL_float* Lx,
+void QDLDL_solve(const QDLDL_int n, const QDLDL_int* Lp, const int* Li, const QDLDL_float* Lx,
                  const QDLDL_float* Dinv, QDLDL_float* x) {
     QDLDL_int i = 0;
 

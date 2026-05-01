@@ -42,7 +42,7 @@
                                          MPUSERIN, MUSERIN_MAT_NAMES, MMATL, MPSOLID, NEDAT, NBAROFF, NBUSHOFF, NELE, NGRID,       &
                                          NMATANGLE, NMATL, NPBAR, NPBEAM, NPBUSH, NPCOMP, NPCARD, NPDAT, NPELAS, NPROD, NPSHEAR,   &
                                          NPSHEL, NPSOLID, NPLATEOFF, NPLATETHICK, NPLOAD4_3D, NPUSER1, NPUSERIN, NSEQ, NSUB,       &
-                                         NTCARD, NTDAT, NTSUB, NVVEC, SOL_NAME
+                                         NTCARD, NTDAT, NTSUB, NVVEC, RESTART, SOL_NAME
 
       USE TIMDAT, ONLY                :  TSEC
       USE PARAMS, ONLY                :  CBMIN3, CBMIN4, IORQ1M, IORQ1S, IORQ1B, IORQ2B, IORQ2T
@@ -65,6 +65,8 @@
       CHARACTER(132*BYTE)             :: MESSAG            ! Char message for file name
       CHARACTER(LEN=DATA_NAM_LEN)     :: NAME_Is           ! Name of data actually read from file
       CHARACTER(LEN=DATA_NAM_LEN)     :: NAME_ShouldBe     ! Name of data that should be read from file
+
+      LOGICAL                         :: L1G_IN_MEMORY     ! .TRUE. if LINK1 element data is still allocated
 
       INTEGER(LONG)                   :: I,J               ! DO loop indices
       INTEGER(LONG)                   :: INT2              ! An integer value read from a file from a file
@@ -295,7 +297,11 @@
 ! **********************************************************************************************************************************
 ! Open L1G
 
-      IF (.NOT. ALLOCATED(ETYPE)) THEN
+      L1G_IN_MEMORY = (RESTART == 'N') .AND. (SOL_NAME(1:7) == 'STATICS') .AND.                                           &
+                     & ALLOCATED(ETYPE) .AND. ALLOCATED(EDAT) .AND. ALLOCATED(EPNT) .AND. ALLOCATED(ESORT1) .AND.          &
+                     & ALLOCATED(ESORT2) .AND. ALLOCATED(EOFF)
+
+      IF (.NOT. L1G_IN_MEMORY) THEN
 
       FILNAM = LINK1G
       UNT    = L1G

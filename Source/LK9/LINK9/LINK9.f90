@@ -85,7 +85,7 @@
       USE MODEL_STUF, ONLY            :  ANY_ACCE_OUTPUT, ANY_DISP_OUTPUT, ANY_MPCF_OUTPUT, ANY_SPCF_OUTPUT, ANY_OLOA_OUTPUT,      &
                                          ANY_GPFO_OUTPUT, ANY_ELFE_OUTPUT, ANY_ELFN_OUTPUT, ANY_STRE_OUTPUT, ANY_STRN_OUTPUT,      &
                                          OELDT, OELOUT, OGROUT, GRID, GROUT, MEFFMASS_CALC, MPFACTOR_CALC, SCNUM, SUBLOD, TITLE,   &
-                                         STITLE, LABEL
+                                         STITLE, LABEL, ETYPE
       USE LINK9_STUFF, ONLY           :  MAXREQ
 
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
@@ -98,6 +98,7 @@
       LOGICAL                         :: WRITE_F06, WRITE_OP2, WRITE_PCH, WRITE_NEU   ! flag
       LOGICAL                         :: LEXIST            ! .TRUE. if a file exists
       LOGICAL                         :: LOPEN             ! .TRUE. if a file is opened
+      LOGICAL                         :: L1G_IN_MEMORY     ! .TRUE. if LINK1 element data is still allocated
 
       CHARACTER, PARAMETER            :: CR13 = CHAR(13)   ! This causes a carriage return simulating the "+" action in a FORMAT
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'LINK9'
@@ -261,6 +262,7 @@
 
       ! Before reading file data in subr LINK9S, deallocate all of those arrays and then allocate them fresh
       CALL LINK_MESSAGE('DEALLOCATE ARRAYS BEFORE READING LINK9S')
+      L1G_IN_MEMORY = ALLOCATED(ETYPE)
                                                            ! Deallocate data in file LINK1D
       CALL DEALLOCATE_MODEL_STUF ( 'SCNUM' )
       CALL DEALLOCATE_MODEL_STUF ( 'TITLES' )
@@ -268,12 +270,14 @@
       CALL DEALLOCATE_MODEL_STUF ( 'GROUT, ELOUT' )
       CALL DEALLOCATE_MODEL_STUF ( 'ELDT' )
                                                            ! Deallocate data in file LINK1G
-      CALL DEALLOCATE_MODEL_STUF ( 'ETYPE, EDAT, EPNT' )
-      CALL DEALLOCATE_MODEL_STUF ( 'ESORT1' )
-      CALL DEALLOCATE_MODEL_STUF ( 'ESORT2' )
-      CALL DEALLOCATE_MODEL_STUF ( 'EOFF' )
-      CALL DEALLOCATE_MODEL_STUF ( 'VVEC, OFFSETS, PLATE stuff' )
-      CALL DEALLOCATE_MODEL_STUF ( 'ELEM PROPERTIES AND MATERIALS' )
+      IF (.NOT. L1G_IN_MEMORY) THEN
+         CALL DEALLOCATE_MODEL_STUF ( 'ETYPE, EDAT, EPNT' )
+         CALL DEALLOCATE_MODEL_STUF ( 'ESORT1' )
+         CALL DEALLOCATE_MODEL_STUF ( 'ESORT2' )
+         CALL DEALLOCATE_MODEL_STUF ( 'EOFF' )
+         CALL DEALLOCATE_MODEL_STUF ( 'VVEC, OFFSETS, PLATE stuff' )
+         CALL DEALLOCATE_MODEL_STUF ( 'ELEM PROPERTIES AND MATERIALS' )
+      ENDIF
                                                            ! Deallocate data in file LINK1K
       CALL DEALLOCATE_MODEL_STUF ( 'TPNT, TDATA' )
       CALL DEALLOCATE_MODEL_STUF ( 'GTEMP' )
@@ -289,12 +293,14 @@
       CALL   ALLOCATE_MODEL_STUF ( 'GROUT, ELOUT', SUBR_NAME )
       CALL   ALLOCATE_MODEL_STUF ( 'ELDT', SUBR_NAME )
                                                            ! Allocate data to be read in LINK9S from file LINK1G
-      CALL   ALLOCATE_MODEL_STUF ( 'ETYPE, EDAT, EPNT', SUBR_NAME )
-      CALL   ALLOCATE_MODEL_STUF ( 'ESORT1', SUBR_NAME )
-      CALL   ALLOCATE_MODEL_STUF ( 'ESORT2', SUBR_NAME )
-      CALL   ALLOCATE_MODEL_STUF ( 'EOFF', SUBR_NAME )
-      CALL   ALLOCATE_MODEL_STUF ( 'VVEC, OFFSETS, PLATE stuff', SUBR_NAME )
-      CALL   ALLOCATE_MODEL_STUF ( 'ELEM PROPERTIES AND MATERIALS', SUBR_NAME )
+      IF (.NOT. L1G_IN_MEMORY) THEN
+         CALL   ALLOCATE_MODEL_STUF ( 'ETYPE, EDAT, EPNT', SUBR_NAME )
+         CALL   ALLOCATE_MODEL_STUF ( 'ESORT1', SUBR_NAME )
+         CALL   ALLOCATE_MODEL_STUF ( 'ESORT2', SUBR_NAME )
+         CALL   ALLOCATE_MODEL_STUF ( 'EOFF', SUBR_NAME )
+         CALL   ALLOCATE_MODEL_STUF ( 'VVEC, OFFSETS, PLATE stuff', SUBR_NAME )
+         CALL   ALLOCATE_MODEL_STUF ( 'ELEM PROPERTIES AND MATERIALS', SUBR_NAME )
+      ENDIF
                                                            ! Allocate data to be read in LINK9S from file LINK1K
       CALL   ALLOCATE_MODEL_STUF ( 'TPNT, TDATA', SUBR_NAME )
       CALL   ALLOCATE_MODEL_STUF ( 'GTEMP', SUBR_NAME )
@@ -997,6 +1003,7 @@ j_do: DO JVEC=1,NUM_SOLNS
                ENDIF
             ENDIF
             CALL OFP3 ( JVEC, FEMAP_SET_ID, ITE, OT4_EROW )
+            CALL LINK_MESSAGE_I('DONE ELEM FORCE/STRESS REQUESTS,                  "',JVEC)
 !           NEW_RESULT = .FALSE.
          ENDIF
          CALL DEALLOCATE_MODEL_STUF ( 'SINGLE ELEMENT ARRAYS' )
@@ -1212,6 +1219,7 @@ j_do: DO JVEC=1,NUM_SOLNS
 
 !xx   WRITE(SC1, * ) '     DEALLOCATE SOME ARRAYS'
 !xx   WRITE(SC1, * )                                       ! Advance 1 line for screen messages
+      CALL LINK_MESSAGE('DEALLOCATE LINK9 SPARSE/COL ARRAYS')
       WRITE(SC1,12345,ADVANCE='NO') '       Deallocate KSF ', CR13  ;   CALL DEALLOCATE_SPARSE_MAT ( 'KSF' )
       WRITE(SC1,12345,ADVANCE='NO') '       Deallocate KSFD', CR13  ;   CALL DEALLOCATE_SPARSE_MAT ( 'KSFD')
       WRITE(SC1,12345,ADVANCE='NO') '       Deallocate MGG ', CR13  ;   CALL DEALLOCATE_SPARSE_MAT ( 'MGG' )
@@ -1234,6 +1242,7 @@ j_do: DO JVEC=1,NUM_SOLNS
       WRITE(SC1,12345,ADVANCE='NO') '       Deallocate QSYS', CR13  ;   CALL DEALLOCATE_COL_VEC    ( 'QSYS_COL' )
 
       CALL DEALLOCATE_IN4_FILES  ( 'IN4FIL' )
+      CALL LINK_MESSAGE('DEALLOCATE LINK9 MODEL ARRAYS')
                                                            ! Deallocate data in file LINK1D
       IF ((SOL_NAME(1:8) /= 'BUCKLING') .OR. (LOAD_ISTEP == 2)) THEN
          ! gotta make SCNUM survive past the 1st run because we use it in LINK4
@@ -1255,9 +1264,11 @@ j_do: DO JVEC=1,NUM_SOLNS
          CALL DEALLOCATE_IN4_FILES ( 'IN4FIL' )
       ENDIF
 
+      CALL LINK_MESSAGE('DEALLOCATE LINK9 LOCAL ARRAYS')
       CALL DEALLOCATE_LINK9_STUF
 
       IF ((SOL_NAME(1:8) /= 'BUCKLING') .AND. (SOL_NAME(1:8) /= 'NLSTATIC')) THEN
+         CALL LINK_MESSAGE('DEALLOCATE LINK9 FINAL MODEL ARRAYS')
          CALL DEALLOCATE_MODEL_STUF ( 'ETYPE, EDAT, EPNT' )
          CALL DEALLOCATE_MODEL_STUF ( 'VVEC, OFFSETS, PLATE stuff' )
          CALL DEALLOCATE_MODEL_STUF ( 'ELEM PROPERTIES AND MATERIALS' )

@@ -37,18 +37,24 @@
                                          NCPENTA15,NCTETRA4, NCTETRA10, NCQUAD4, NCQUAD4K, NCROD, NCSHEAR, NCTRIA3, NCTRIA3K,      &
                                          SOL_NAME
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  ZERO, ONE, FOUR
+      USE CONSTANTS_1, ONLY           :  ZERO, ONE, TWO, FOUR
+      USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE FEMAP_ARRAYS, ONLY          :  FEMAP_EL_NUMS
       USE PARAMS, ONLY                :  OTMSKIP, PRTNEU
-      USE MODEL_STUF, ONLY            :  AGRID, ANY_STRE_OUTPUT, EDAT, EPNT, ETYPE, EID, ELGP, ELMTYP, ELOUT,                      &
-                                         METYPE, NUM_SEi, NUM_EMG_FATAL_ERRS, PCOMP_PROPS, PLY_NUM, STRESS, TYPE, SHELL_STR_ANGLE
-      USE CC_OUTPUT_DESCRIBERS, ONLY  :  STRE_LOC, STRE_OPT
-      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX
+      USE MODEL_STUF, ONLY            :  AGRID, ANY_STRE_OUTPUT, ANY_STRN_OUTPUT, EDAT, EPNT, ETYPE, EID, ELGP, ELMTYP, ELOUT,      &
+                                         METYPE, NUM_SEi, NUM_EMG_FATAL_ERRS, PCOMP_PROPS, PLY_NUM, STRESS, STRAIN, TYPE,           &
+                                         SHELL_STR_ANGLE
+      USE CC_OUTPUT_DESCRIBERS, ONLY  :  STRE_LOC, STRE_OPT, STRN_LOC
+      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX,              &
+                                         STRN_OUT_CACHE, STRN_OUT_CACHE_ERR, STRN_OUT_CACHE_ERR_INDEX, STRN_OUT_CACHE_ROWS,         &
+                                         STRN_OUT_CACHE_VALID, STRE_OUT_CACHE, STRE_OUT_CACHE_ERR, STRE_OUT_CACHE_ERR_INDEX,        &
+                                         STRE_OUT_CACHE_ROWS, STRE_OUT_CACHE_VALID
       USE OUTPUT4_MATRICES, ONLY      :  OTM_STRE, TXT_STRE
 
       USE PLANE_COORD_TRANS_21_Interface
       USE TRANSFORM_SHELL_STR_Interface
       USE OFP3_STRE_NO_PCOMP_USE_IFs
+      USE LINK_MESSAGE_Interface
 
       IMPLICIT NONE
 
@@ -78,34 +84,49 @@
 
       INTEGER(LONG)                   :: NUM_OTM_ENTRIES   ! Number of entries in OGEL for a particular element type
       INTEGER(LONG)                   :: NUM_PTS(METYPE)   ! Num diff stress points for one element (3rd dim in arrays SEi, STEi)
+      INTEGER(LONG)                   :: CACHE_ROW          ! Row in cached stress/strain output vectors
 
                                                            ! Stress index (1 through 9) where poly fit err is max
       INTEGER(LONG)                   :: STRESS_OUT_ERR_INDEX(MAX_STRESS_POINTS)
+      INTEGER(LONG)                   :: STRAIN_OUT_ERR_INDEX(MAX_STRESS_POINTS)
 
 
 
                                                            ! Array of %errs from subr POLYNOM_FIT_STRE_STRN (only NUM_PTS vals used)
       REAL(DOUBLE)                    :: STRESS_OUT_PCT_ERR(MAX_STRESS_POINTS)
+      REAL(DOUBLE)                    :: STRAIN_OUT_PCT_ERR(MAX_STRESS_POINTS)
 
       REAL(DOUBLE)                    :: PCT_ERR_MAX       ! Max value from array STRESS_OUT_PCT_ERR
 
                                                            ! Array of values from array STRESS for all stress points
       REAL(DOUBLE)                    :: STRESS_RAW(9,MAX_STRESS_POINTS)
+      REAL(DOUBLE)                    :: STRAIN_RAW(9,MAX_STRESS_POINTS)
 
                                                            ! Array of output stress values after surface fit
       REAL(DOUBLE)                    :: STRESS_OUT(9,MAX_STRESS_POINTS)
+      REAL(DOUBLE)                    :: STRAIN_OUT(9,MAX_STRESS_POINTS)
       REAL(DOUBLE)                    :: TEL(3,3)          ! Transformation matrix from cartesian local (L) to element (E) coordinates.
 
       ! OP2 stuff
       CHARACTER(8*BYTE)               :: TABLE_NAME   ! name of the op2 table name
       INTEGER(LONG)                   :: ITABLE       ! the subtable
       LOGICAL                         :: WRITE_NEU
+      LOGICAL                         :: CACHE_STRN_OUT
+      LOGICAL                         :: USE_CACHED_STRE
 
       INTRINSIC IAND
       ITABLE = 0
       TABLE_NAME = "OES ERR "
 
       WRITE_NEU = (PRTNEU == 'Y')
+      USE_CACHED_STRE = (STRE_OUT_CACHE_VALID == 'Y') .AND. (STRN_OUT_CACHE_VALID == 'Y')
+      CACHE_STRN_OUT = (ANY_STRN_OUTPUT > 0) .AND. (STRE_LOC == STRN_LOC) .AND. (NCQUAD4 == NELE) .AND.                            &
+                       (SOL_NAME(1:12) /= 'GEN CB MODEL') .AND. (.NOT. USE_CACHED_STRE)
+      CACHE_ROW = 0
+      IF (.NOT. USE_CACHED_STRE) THEN
+         STRN_OUT_CACHE_ROWS = 0
+         STRN_OUT_CACHE_VALID = 'N'
+      ENDIF
 
 ! **********************************************************************************************************************************
 ! Process element stress output (STRESS) requests for all elems except composite shells
@@ -166,25 +187,43 @@ elems_5: DO J = 1,NELE
             IF (ETYPE(J) == ELMTYP(I)) THEN
                ELOUT_STRE = IAND(ELOUT(J,INT_SC_NUM),IBIT(ELOUT_STRE_BIT))
                IF (ELOUT_STRE > 0) THEN
-                  DO K=0,MBUG-1
-                     WRT_BUG(K) = 0
-                  ENDDO
-                  PLY_NUM = 1                              ! 'N' in call to EMG means do not write to BUG file
-                  CALL EMG ( J   , OPT, 'N', SUBR_NAME, 'N' )
-                  IF (NUM_EMG_FATAL_ERRS > 0) THEN
-                     IERROR = IERROR + 1
-                     CYCLE elems_5
-                  ENDIF
-                  CALL ELMDIS
+                  IF (USE_CACHED_STRE .AND. (CACHE_ROW + NUM_PTS(I) <= STRE_OUT_CACHE_ROWS) .AND.                                 &
+                      (CACHE_ROW + NUM_PTS(I) <= STRN_OUT_CACHE_ROWS)) THEN
+                     DO M=1,NUM_PTS(I)
+                        STRESS_OUT(:,M) = STRE_OUT_CACHE(CACHE_ROW+M,:)
+                        STRESS_OUT_PCT_ERR(M) = STRE_OUT_CACHE_ERR(CACHE_ROW+M)
+                        STRESS_OUT_ERR_INDEX(M) = STRE_OUT_CACHE_ERR_INDEX(CACHE_ROW+M)
+                        STRAIN_OUT(:,M) = STRN_OUT_CACHE(CACHE_ROW+M,:)
+                     ENDDO
+                     CACHE_ROW = CACHE_ROW + NUM_PTS(I)
+                  ELSE
+                     DO K=0,MBUG-1
+                        WRT_BUG(K) = 0
+                     ENDDO
+                     PLY_NUM = 1                              ! 'N' in call to EMG means do not write to BUG file
+                     CALL EMG ( J   , OPT, 'N', SUBR_NAME, 'N' )
+                     IF (NUM_EMG_FATAL_ERRS > 0) THEN
+                        IERROR = IERROR + 1
+                        CYCLE elems_5
+                     ENDIF
+                     CALL ELMDIS
 
-                  DO M=1,NUM_PTS(I)
-                     CALL ELEM_STRE_STRN_ARRAYS ( M )
-                     STRESS_RAW(:,M) = STRESS(:)
-                  ENDDO
+                     DO M=1,NUM_PTS(I)
+                        CALL ELEM_STRE_STRN_ARRAYS ( M )
+                        STRESS_RAW(:,M) = STRESS(:)
+                        IF (CACHE_STRN_OUT) THEN
+                           STRAIN_RAW(:,M) = STRAIN(:)
+                        ENDIF
+                     ENDDO
 
-                  STRESS_OUT(:,1) = STRESS(:)            ! Set STRESS_OUT for NUM_PTS(I) = 1
+                     STRESS_OUT(:,1) = STRESS(:)            ! Set STRESS_OUT for NUM_PTS(I) = 1
+                     IF (CACHE_STRN_OUT) THEN
+                        STRAIN_OUT(:,1) = STRAIN_RAW(:,1)
+                        STRAIN_OUT_PCT_ERR(:) = ZERO
+                        STRAIN_OUT_ERR_INDEX(:) = 0
+                     ENDIF
 
-                  IF ((STRE_LOC == 'CORNER  ') .OR.                                                                                &
+                     IF ((STRE_LOC == 'CORNER  ') .OR.                                                                             &
                       (STRE_LOC == 'GAUSS   ') .OR.                                                                                &
                       (TYPE(1:4) == 'HEXA') .OR.                                                                                   &
                       (TYPE(1:5) == 'PENTA') .OR.                                                                                  &
@@ -194,20 +233,34 @@ elems_5: DO J = 1,NELE
                      IF (TYPE(1:5) == 'QUAD4') THEN
                         CALL POLYNOM_FIT_STRE_STRN ( STRESS_RAW, 9, NUM_PTS(I), STRESS_OUT, STRESS_OUT_PCT_ERR,                    &
                                                      STRESS_OUT_ERR_INDEX, PCT_ERR_MAX )
+                        IF (CACHE_STRN_OUT) THEN
+                           CALL POLYNOM_FIT_STRE_STRN ( STRAIN_RAW, 9, NUM_PTS(I), STRAIN_OUT, STRAIN_OUT_PCT_ERR,                 &
+                                                        STRAIN_OUT_ERR_INDEX, PCT_ERR_MAX )
+                        ENDIF
 
                      ELSE IF (TYPE(1:5) == 'QUAD8') THEN
                         CALL POLYNOM_FIT_STRE_STRN ( STRESS_RAW, 9, NUM_PTS(I), STRESS_OUT, STRESS_OUT_PCT_ERR,                    &
                                                      STRESS_OUT_ERR_INDEX, PCT_ERR_MAX )
+                        IF (CACHE_STRN_OUT) THEN
+                           CALL POLYNOM_FIT_STRE_STRN ( STRAIN_RAW, 9, NUM_PTS(I), STRAIN_OUT, STRAIN_OUT_PCT_ERR,                 &
+                                                        STRAIN_OUT_ERR_INDEX, PCT_ERR_MAX )
+                        ENDIF
 
                                                            ! Transform stress from the cartesian local coordinate system to
                                                            ! the element coordinate system
                         DO M=2,NUM_PTS(I)
                            CALL PLANE_COORD_TRANS_21( SHELL_STR_ANGLE( M ), TEL, '')
                            CALL TRANSFORM_SHELL_STR( TEL, STRESS_OUT(:,M), ONE)
+                           IF (CACHE_STRN_OUT) THEN
+                              CALL TRANSFORM_SHELL_STR( TEL, STRAIN_OUT(:,M), TWO)
+                           ENDIF
                         ENDDO
                                                            ! Center stress is the average of corner stress in element coordinates.
                                                            ! This is how MSC does it.
                         STRESS_OUT(:,1) = (STRESS_OUT(:,2) + STRESS_OUT(:,3) + STRESS_OUT(:,4) + STRESS_OUT(:,5)) / FOUR
+                        IF (CACHE_STRN_OUT) THEN
+                           STRAIN_OUT(:,1) = (STRAIN_OUT(:,2) + STRAIN_OUT(:,3) + STRAIN_OUT(:,4) + STRAIN_OUT(:,5)) / FOUR
+                        ENDIF
 
                      ELSE IF ((TYPE(1:4) == 'HEXA') .OR.                                                                           &
                               (TYPE(1:5) == 'PENTA') .OR.                                                                          &
@@ -215,9 +268,13 @@ elems_5: DO J = 1,NELE
 ! Stresses are directly evaluated at the corner grid points. If they are going to be evaluated at Gauss points
 ! then extrapolated to grid points, that should be done here, in POLYNOM_FIT_STRE_STRN, or in an equivalent subroutine.
                         STRESS_OUT(:,:) = STRESS_RAW(:,:)
+                        IF (CACHE_STRN_OUT) THEN
+                           STRAIN_OUT(:,:) = STRAIN_RAW(:,:)
+                        ENDIF
 
                      ENDIF
 
+                  ENDIF
                   ENDIF
 
 do_stress_pts:    DO M=1,NUM_PTS(I)
@@ -227,6 +284,22 @@ do_stress_pts:    DO M=1,NUM_PTS(I)
                      ENDDO
 
                      CALL CALC_ELEM_STRESSES ( MAXREQ, NUM_OGEL, J, 'Y', 'N' )
+                     IF (CACHE_STRN_OUT) THEN
+                        STRN_OUT_CACHE_ROWS = STRN_OUT_CACHE_ROWS + 1
+                        IF (STRN_OUT_CACHE_ROWS <= MAXREQ) THEN
+                           STRN_OUT_CACHE(STRN_OUT_CACHE_ROWS,:) = STRAIN_OUT(:,M)
+                           STRN_OUT_CACHE_ERR(STRN_OUT_CACHE_ROWS) = ZERO
+                           STRN_OUT_CACHE_ERR_INDEX(STRN_OUT_CACHE_ROWS) = 0
+                           IF ((STRE_LOC == 'CORNER  ') .OR. (STRE_LOC == 'GAUSS   ')) THEN
+                              IF (TYPE(1:5) == 'QUAD4') THEN
+                                 STRN_OUT_CACHE_ERR(STRN_OUT_CACHE_ROWS) = STRAIN_OUT_PCT_ERR(M)
+                                 STRN_OUT_CACHE_ERR_INDEX(STRN_OUT_CACHE_ROWS) = STRAIN_OUT_ERR_INDEX(M)
+                              ENDIF
+                           ENDIF
+                        ELSE
+                           CACHE_STRN_OUT = .FALSE.
+                        ENDIF
+                     ENDIF
                                                            ! If CB soln, write rows of OGEL, from CALC_ELEM_STRESSES, to OTM_STRE
                      IF (SOL_NAME(1:12) == 'GEN CB MODEL') THEN
 
@@ -295,10 +368,12 @@ do_stress_pts:    DO M=1,NUM_PTS(I)
                      IF (NUM_OGEL_ROWS == NELREQ(I)) THEN
                         CALL CHK_OGEL_ZEROS ( NUM_OGEL )
  100                    FORMAT("*DEBUG:      ",A,"; ELEMENT_TYPE=",A,"; TABLE_NAME=",A,"; ITABLE=",I8)
-                        WRITE(ERR,100) "A",TYPE,TABLE_NAME,ITABLE
+                        IF (DEBUG(176) > 0) WRITE(ERR,100) "A",TYPE,TABLE_NAME,ITABLE
                         CALL SET_OES_TABLE_NAME(TYPE, TABLE_NAME, ITABLE)
-                        WRITE(ERR,100) "B",TYPE,TABLE_NAME,ITABLE
+                        IF (DEBUG(176) > 0) WRITE(ERR,100) "B",TYPE,TABLE_NAME,ITABLE
+                        CALL LINK_MESSAGE('    OFP3 STRE_NO_PCOMP write begin')
                         CALL WRITE_ELEM_STRESSES ( JVEC, NUM_OGEL_ROWS, IHDR, NUM_PTS(I), ITABLE )
+                        CALL LINK_MESSAGE('    OFP3 STRE_NO_PCOMP write done')
                         EXIT
                      ENDIF
                   ENDIF
@@ -310,6 +385,15 @@ do_stress_pts:    DO M=1,NUM_PTS(I)
          ENDDO elems_5
 
       ENDDO reqs5
+
+      IF (.NOT. USE_CACHED_STRE) THEN
+         IF (CACHE_STRN_OUT .AND. (STRN_OUT_CACHE_ROWS > 0)) THEN
+            STRN_OUT_CACHE_VALID = 'Y'
+         ELSE
+            STRN_OUT_CACHE_VALID = 'N'
+            STRN_OUT_CACHE_ROWS = 0
+         ENDIF
+      ENDIF
 
       IF ((TABLE_NAME .NE. "OES ERR ") .AND. (ITABLE < 0)) THEN
         CALL END_OP2_TABLE(ITABLE)

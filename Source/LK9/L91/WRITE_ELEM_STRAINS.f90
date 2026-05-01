@@ -110,7 +110,7 @@
       DEVICE_CODE = 1  ! PLOT
       STRESS_CODE = 0
  1    FORMAT("WRITE OSTR F06/OP2; ITABLE=",I8," (should be -4, -6, ...)")
-      WRITE(ERR,1) ITABLE
+      IF (DEBUG(176) > 0) WRITE(ERR,1) ITABLE
 
       DO I=1,MAX_NUM_STR
          WRT_ERR_INDEX_NOTE(I) = 'N'
@@ -486,7 +486,7 @@
             ELSE
                ! CQUAD4-144
  3             FORMAT(' *DEBUG:  WRITE_CQUAD4-144:  NUM=',I4, " NUM_PTS=", I4, " STRN_LOC=",A,"ITABLE=",I4)
-               WRITE(ERR,3) NUM,NUM_PTS,STRN_LOC,ITABLE
+               IF (DEBUG(176) > 0) WRITE(ERR,3) NUM,NUM_PTS,STRN_LOC,ITABLE
                ELEMENT_TYPE = 144
                NUM_WIDE = 87 ! 2 + 17 * (4+1)  ! 4 nodes + 1 centroid
 
@@ -523,31 +523,31 @@
          !IF(WRITE_F06) THEN
             K = 0
             DO I=1,NUM,NUM_PTS
- 4             FORMAT(' *DEBUG:  WRITE_CQUAD4-144:  I=',I4, " K=", I4)
-               K = K + 1
-               WRITE(ERR,4) I,K
-               WRITE(F06,*)
-               WRITE(F06,1403) FILL(1: 0), EID_OUT_ARRAY(I,1),(OGEL(K,J),J=1,10)
-
-               K = K + 1
-               WRITE(F06,1404) FILL(1: 0), (OGEL(K,J),J=1,8)
-
-               DO L=1,NUM_PTS-1
-                  K = K + 1
-                  WRITE(ERR,4) I,K
-
-                  WRITE(F06,*)
-                  IF (DABS(POLY_FIT_ERR(I+L)) >= 0.01D0) THEN
-                     WRITE(F06,1405) FILL(1: 0), GID_OUT_ARRAY(I,L+1),(OGEL(K,J),J=1,10), POLY_FIT_ERR(I+L), POLY_FIT_ERR_INDEX(I+L)
-                     WRT_ERR_INDEX_NOTE(POLY_FIT_ERR_INDEX(I+L)) = 'Y'
-                  ELSE
-                     WRITE(F06,1406) FILL(1: 0), GID_OUT_ARRAY(I,L+1),(OGEL(K,J),J=1,10), POLY_FIT_ERR(I+L)
-                  ENDIF
-
-                  K = K + 1
-                  WRITE(F06,1407) FILL(1: 0), (OGEL(K,J),J=1,8)
-               ENDDO
-            ENDDO  ! num_pts
+	 4             FORMAT(' *DEBUG:  WRITE_CQUAD4-144:  I=',I4, " K=", I4)
+	               K = K + 1
+	               IF (DEBUG(176) > 0) WRITE(ERR,4) I,K
+	               WRITE(F06,*)
+	               WRITE(F06,1403) FILL(1: 0), EID_OUT_ARRAY(I,1),(OGEL(K,J),J=1,10)
+	
+	               K = K + 1
+	               WRITE(F06,1404) FILL(1: 0), (OGEL(K,J),J=1,8)
+	
+	               DO L=1,NUM_PTS-1
+	                  K = K + 1
+	                  IF (DEBUG(176) > 0) WRITE(ERR,4) I,K
+	
+	                  WRITE(F06,*)
+	                  IF (DABS(POLY_FIT_ERR(I+L)) >= 0.01D0) THEN
+	                     WRITE(F06,1405) FILL(1: 0), GID_OUT_ARRAY(I,L+1),(OGEL(K,J),J=1,10), POLY_FIT_ERR(I+L), POLY_FIT_ERR_INDEX(I+L)
+	                     WRT_ERR_INDEX_NOTE(POLY_FIT_ERR_INDEX(I+L)) = 'Y'
+	                  ELSE
+	                     WRITE(F06,1406) FILL(1: 0), GID_OUT_ARRAY(I,L+1),(OGEL(K,J),J=1,10), POLY_FIT_ERR(I+L)
+	                  ENDIF
+	
+	                  K = K + 1
+	                  WRITE(F06,1407) FILL(1: 0), (OGEL(K,J),J=1,8)
+	               ENDDO
+	            ENDDO  ! num_pts
 
             CALL GET_MAX_MIN_ABS_STR ( NUM, 10, 'Y', MAX_ANS, MIN_ANS, ABS_ANS )
 
@@ -834,6 +834,7 @@
       USE PENTIUM_II_KIND, ONLY     :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY :  F06, OP2, ERR
       USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, OGEL
+      USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE, INTRINSIC :: IEEE_ARITHMETIC, ONLY: IEEE_Value, IEEE_QUIET_NAN
       USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: REAL32
       IMPLICIT NONE
@@ -883,7 +884,7 @@
  101      FORMAT("*DEBUG: WRITE_CSHEAR    ITABLE=",I8," (should be -5, -7,...)")
           NVALUES = NUM * NUM_WIDE
           NTOTAL = NVALUES * 4
-          WRITE(ERR,100) ITABLE,NUM,NVALUES,NTOTAL
+          IF (DEBUG(176) > 0) WRITE(ERR,100) ITABLE,NUM,NVALUES,NTOTAL
           WRITE(OP2) NVALUES
 
           ! Nastran OP2 requires this write call be a one liner...so it's a little weird...
@@ -976,7 +977,7 @@
 !101      FORMAT("*DEBUG: WRITE_CTRIA3    ITABLE=",I8," (should be -5, -7,...)")
           NVALUES = NUM * NUM_WIDE
           NTOTAL = NVALUES * 4
-          WRITE(ERR,100) ITABLE,NUM,NVALUES,NTOTAL
+          IF (DEBUG(176) > 0) WRITE(ERR,100) ITABLE,NUM,NVALUES,NTOTAL
 
           !CALL GET_STRESS_CODE(STRESS_CODE, IS_VON_MISES, IS_STRAIN, IS_FIBER_DISTANCE)
           CALL GET_STRESS_CODE( STRESS_CODE, 1,            1,         1)

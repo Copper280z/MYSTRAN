@@ -38,17 +38,21 @@
                                          SOL_NAME
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ZERO, TWO, FOUR
+      USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE FEMAP_ARRAYS, ONLY          :  FEMAP_EL_NUMS
       USE PARAMS, ONLY                :  OTMSKIP, PRTNEU
       USE MODEL_STUF, ONLY            :  AGRID, ANY_STRN_OUTPUT, EDAT, EPNT, ETYPE, EID, ELGP, ELMTYP, ELOUT,                      &
                                          METYPE, NUM_SEi, NUM_EMG_FATAL_ERRS, PCOMP_PROPS, PLY_NUM, STRAIN, TYPE, SHELL_STR_ANGLE
       USE CC_OUTPUT_DESCRIBERS, ONLY  :  STRN_LOC, STRN_OPT
-      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX
+      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX,              &
+                                         STRN_OUT_CACHE, STRN_OUT_CACHE_ERR, STRN_OUT_CACHE_ERR_INDEX, STRN_OUT_CACHE_ROWS,         &
+                                         STRN_OUT_CACHE_VALID
       USE OUTPUT4_MATRICES, ONLY      :  OTM_STRN, TXT_STRN
 
       USE PLANE_COORD_TRANS_21_Interface
       USE TRANSFORM_SHELL_STR_Interface
       USE OFP3_STRN_NO_PCOMP_USE_IFs
+      USE LINK_MESSAGE_Interface
 
       IMPLICIT NONE
 
@@ -78,6 +82,7 @@
                                                            ! Indicator for output of elem data to BUG file
       INTEGER(LONG)                   :: NUM_OTM_ENTRIES   ! Number of entries in OGEL for a particular element type
       INTEGER(LONG)                   :: NUM_PTS(METYPE)   ! Num diff strain points for one element (3rd dim in arrays SEi, STEi)
+      INTEGER(LONG)                   :: CACHE_ROW          ! Row in cached strain output vectors
 
                                                            ! Strain index (1 through 9) where poly fit err is max
       INTEGER(LONG)                   :: STRAIN_OUT_ERR_INDEX(MAX_STRESS_POINTS)
@@ -100,12 +105,15 @@
       CHARACTER(8*BYTE)               :: TABLE_NAME   ! name of the op2 table name
       INTEGER(LONG)                   :: ITABLE       ! the subtable
       LOGICAL                         :: WRITE_NEU
+      LOGICAL                         :: USE_CACHED_STRN
 
       INTRINSIC IAND
       ITABLE = 0
       TABLE_NAME = "OES ERR "
 
       WRITE_NEU = (PRTNEU == 'Y')
+      USE_CACHED_STRN = (STRN_OUT_CACHE_VALID == 'Y')
+      CACHE_ROW = 0
 
 ! **********************************************************************************************************************************
 ! Process element strain output (STRAIN) requests for all elems except composite shells
@@ -167,61 +175,70 @@ elems_7: DO J = 1,NELE
             IF (ETYPE(J) == ELMTYP(I)) THEN
                ELOUT_STRN = IAND(ELOUT(J,INT_SC_NUM),IBIT(ELOUT_STRN_BIT))
                IF (ELOUT_STRN > 0) THEN
-                  DO K=0,MBUG-1
-                     WRT_BUG(K) = 0
-                  ENDDO
-                  PLY_NUM = 1                              ! 'N' in call to EMG means do not write to BUG file
-                  CALL EMG ( J   , OPT, 'N', SUBR_NAME, 'N' )! Calc SEi matrices
-                  IF (NUM_EMG_FATAL_ERRS > 0) THEN
-                     IERROR = IERROR + 1
-                     CYCLE elems_7
-                  ENDIF
-                  CALL ELMDIS
-
-                  DO M=1,NUM_PTS(I)
-                     CALL ELEM_STRE_STRN_ARRAYS ( M )
-                     DO K=1,9
-                        STRAIN_RAW(K,M) = STRAIN(K)
+                  IF (USE_CACHED_STRN .AND. (CACHE_ROW + NUM_PTS(I) <= STRN_OUT_CACHE_ROWS)) THEN
+                     DO M=1,NUM_PTS(I)
+                        STRAIN_OUT(:,M) = STRN_OUT_CACHE(CACHE_ROW+M,:)
+                        STRAIN_OUT_PCT_ERR(M) = STRN_OUT_CACHE_ERR(CACHE_ROW+M)
+                        STRAIN_OUT_ERR_INDEX(M) = STRN_OUT_CACHE_ERR_INDEX(CACHE_ROW+M)
                      ENDDO
-                  ENDDO
+                     CACHE_ROW = CACHE_ROW + NUM_PTS(I)
+                  ELSE
+                     DO K=0,MBUG-1
+                        WRT_BUG(K) = 0
+                     ENDDO
+                     PLY_NUM = 1                              ! 'N' in call to EMG means do not write to BUG file
+                     CALL EMG ( J   , OPT, 'N', SUBR_NAME, 'N' )! Calc SEi matrices
+                     IF (NUM_EMG_FATAL_ERRS > 0) THEN
+                        IERROR = IERROR + 1
+                        CYCLE elems_7
+                     ENDIF
+                     CALL ELMDIS
 
-                  STRAIN_OUT(:,1) = STRAIN(:)              ! Set STRAIN_OUT for NUM_PTS(I) = 1
+                     DO M=1,NUM_PTS(I)
+                        CALL ELEM_STRE_STRN_ARRAYS ( M )
+                        DO K=1,9
+                           STRAIN_RAW(K,M) = STRAIN(K)
+                        ENDDO
+                     ENDDO
 
-                  IF ((STRN_LOC == 'CORNER  ') .OR.                                                                                &
-                      (STRN_LOC == 'GAUSS   ') .OR.                                                                                &
-                      (TYPE(1:4) == 'HEXA') .OR.                                                                                   &
-                      (TYPE(1:5) == 'PENTA') .OR.                                                                                  &
-                      (TYPE(1:5) == 'TETRA') .OR.                                                                                  &
-                      (TYPE(1:5) == 'QUAD8')) THEN
+                     STRAIN_OUT(:,1) = STRAIN(:)              ! Set STRAIN_OUT for NUM_PTS(I) = 1
 
-                     IF (TYPE(1:5) == 'QUAD4') THEN
-                        CALL POLYNOM_FIT_STRE_STRN ( STRAIN_RAW, 9, NUM_PTS(I), STRAIN_OUT, STRAIN_OUT_PCT_ERR,                    &
-                                                     STRAIN_OUT_ERR_INDEX, PCT_ERR_MAX )
+                     IF ((STRN_LOC == 'CORNER  ') .OR.                                                                                &
+                         (STRN_LOC == 'GAUSS   ') .OR.                                                                                &
+                         (TYPE(1:4) == 'HEXA') .OR.                                                                                   &
+                         (TYPE(1:5) == 'PENTA') .OR.                                                                                  &
+                         (TYPE(1:5) == 'TETRA') .OR.                                                                                  &
+                         (TYPE(1:5) == 'QUAD8')) THEN
 
-                     ELSE IF (TYPE(1:5) == 'QUAD8') THEN
-                        CALL POLYNOM_FIT_STRE_STRN ( STRAIN_RAW, 9, NUM_PTS(I), STRAIN_OUT, STRAIN_OUT_PCT_ERR,                    &
-                                                     STRAIN_OUT_ERR_INDEX, PCT_ERR_MAX )
+                        IF (TYPE(1:5) == 'QUAD4') THEN
+                           CALL POLYNOM_FIT_STRE_STRN ( STRAIN_RAW, 9, NUM_PTS(I), STRAIN_OUT, STRAIN_OUT_PCT_ERR,                 &
+                                                        STRAIN_OUT_ERR_INDEX, PCT_ERR_MAX )
+
+                        ELSE IF (TYPE(1:5) == 'QUAD8') THEN
+                           CALL POLYNOM_FIT_STRE_STRN ( STRAIN_RAW, 9, NUM_PTS(I), STRAIN_OUT, STRAIN_OUT_PCT_ERR,                 &
+                                                        STRAIN_OUT_ERR_INDEX, PCT_ERR_MAX )
 
                                                            ! Transform strain from the cartesian local coordinate system to
                                                            ! the element coordinate system
-                        DO M=1,NUM_PTS(I)
-                           CALL PLANE_COORD_TRANS_21( SHELL_STR_ANGLE( M ), TEL, '')
-                           CALL TRANSFORM_SHELL_STR( TEL, STRAIN_OUT(:,M), TWO)
-                        ENDDO
+                           DO M=1,NUM_PTS(I)
+                              CALL PLANE_COORD_TRANS_21( SHELL_STR_ANGLE( M ), TEL, '')
+                              CALL TRANSFORM_SHELL_STR( TEL, STRAIN_OUT(:,M), TWO)
+                           ENDDO
 
                                                            ! Center strain is the average of corner strain in element coordinates.
                                                            ! This is how MSC does it.
-                        STRAIN_OUT(:,1) = (STRAIN_OUT(:,2) + STRAIN_OUT(:,3) + STRAIN_OUT(:,4) + STRAIN_OUT(:,5)) / FOUR
+                           STRAIN_OUT(:,1) = (STRAIN_OUT(:,2) + STRAIN_OUT(:,3) + STRAIN_OUT(:,4) + STRAIN_OUT(:,5)) / FOUR
 
-                     ELSE IF ((TYPE(1:4) == 'HEXA') .OR.                                                                           &
-                              (TYPE(1:5) == 'PENTA') .OR.                                                                          &
-                              (TYPE(1:5) == 'TETRA')) THEN
+                        ELSE IF ((TYPE(1:4) == 'HEXA') .OR.                                                                        &
+                                 (TYPE(1:5) == 'PENTA') .OR.                                                                       &
+                                 (TYPE(1:5) == 'TETRA')) THEN
 ! Strains are directly evaluated at the corner grid points. If they are going to be evaluated at Gauss points
 ! then extrapolated to grid points, that should be done here, in POLYNOM_FIT_STRE_STRN, or in an equivalent subroutine.
-                        STRAIN_OUT(:,:) = STRAIN_RAW(:,:)
+                           STRAIN_OUT(:,:) = STRAIN_RAW(:,:)
+
+                        ENDIF
 
                      ENDIF
-
                   ENDIF
 
 do_strain_pts:    DO M=1,NUM_PTS(I)
@@ -298,10 +315,12 @@ do_strain_pts:    DO M=1,NUM_PTS(I)
                      IF (NUM_OGEL_ROWS == NELREQ(I)) THEN
                         CALL CHK_OGEL_ZEROS ( NUM_OGEL )
  100                    FORMAT("*DEBUG:      ",A,"; ELEMENT_TYPE=",A,"; TABLE_NAME=",A,"; ITABLE=",I8)
-                        WRITE(ERR,100) "A",TYPE,TABLE_NAME,ITABLE
+                        IF (DEBUG(176) > 0) WRITE(ERR,100) "A",TYPE,TABLE_NAME,ITABLE
                         CALL SET_OST_TABLE_NAME(TYPE, TABLE_NAME, ITABLE)
-                        WRITE(ERR,100) "B",TYPE,TABLE_NAME,ITABLE
+                        IF (DEBUG(176) > 0) WRITE(ERR,100) "B",TYPE,TABLE_NAME,ITABLE
+                        CALL LINK_MESSAGE('    OFP3 STRN_NO_PCOMP write begin')
                         CALL WRITE_ELEM_STRAINS ( JVEC, NUM_OGEL_ROWS, IHDR, NUM_PTS(I), ITABLE )
+                        CALL LINK_MESSAGE('    OFP3 STRN_NO_PCOMP write done')
                         EXIT
                      ENDIF
                   ENDIF

@@ -435,22 +435,30 @@ res19:IF (RESTART == 'N') THEN
 ! Write element data to L1G. Save L1G for use in LINK9.
          IF (LOAD_ISTEP == 1) THEN
 
-            CALL FILE_OPEN ( L1G, LINK1G, OUNT, 'REPLACE', L1G_MSG, 'WRITE_STIME', 'UNFORMATTED', 'WRITE', 'REWIND', 'Y', 'N' )
+            IF ((RESTART == 'N') .AND. (SOL_NAME(1:7) == 'STATICS')) THEN
 
-            CALL LINK_MESSAGE('WRITE ELEMENT DATA TO FILE                  ')
+               CALL LINK_MESSAGE('KEEP ELEMENT DATA IN MEMORY FOR LINK9      ')
 
-            CALL ELSAVE
+            ELSE
 
-            IF ((SOL_NAME(1:8) /= 'BUCKLING') .AND. (SOL_NAME(1:8) /= 'NLSTATIC') .AND. (SOL_NAME(1:8) /= 'DIFFEREN')) THEN
-               CALL DEALLOCATE_MODEL_STUF ( 'ETYPE, EDAT, EPNT' )
-               CALL DEALLOCATE_MODEL_STUF ( 'VVEC, OFFSETS, PLATE stuff' )
-               CALL DEALLOCATE_MODEL_STUF ( 'ELEM PROPERTIES AND MATERIALS' )
-               CALL DEALLOCATE_MODEL_STUF ( 'EOFF' )
-               CALL DEALLOCATE_MODEL_STUF ( 'ESORT1' )
-               CALL DEALLOCATE_MODEL_STUF ( 'ESORT2' )
+               CALL FILE_OPEN ( L1G, LINK1G, OUNT, 'REPLACE', L1G_MSG, 'WRITE_STIME', 'UNFORMATTED', 'WRITE', 'REWIND', 'Y', 'N' )
+
+               CALL LINK_MESSAGE('WRITE ELEMENT DATA TO FILE                  ')
+
+               CALL ELSAVE
+
+               IF ((SOL_NAME(1:8) /= 'BUCKLING') .AND. (SOL_NAME(1:8) /= 'NLSTATIC') .AND. (SOL_NAME(1:8) /= 'DIFFEREN')) THEN
+                  CALL DEALLOCATE_MODEL_STUF ( 'ETYPE, EDAT, EPNT' )
+                  CALL DEALLOCATE_MODEL_STUF ( 'VVEC, OFFSETS, PLATE stuff' )
+                  CALL DEALLOCATE_MODEL_STUF ( 'ELEM PROPERTIES AND MATERIALS' )
+                  CALL DEALLOCATE_MODEL_STUF ( 'EOFF' )
+                  CALL DEALLOCATE_MODEL_STUF ( 'ESORT1' )
+                  CALL DEALLOCATE_MODEL_STUF ( 'ESORT2' )
+               ENDIF
+
+               CALL FILE_CLOSE ( L1G, LINK1G, 'KEEP' )
+
             ENDIF
-
-            CALL FILE_CLOSE ( L1G, LINK1G, 'KEEP' )
 
          ENDIF
 

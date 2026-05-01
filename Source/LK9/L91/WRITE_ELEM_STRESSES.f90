@@ -110,7 +110,7 @@
       DEVICE_CODE = 1  ! PLOT
       STRESS_CODE = 0
  1    FORMAT("WRITE OES F06/OP2; ITABLE=",I8," (should be -4, -6, ...)")
-      WRITE(ERR,1) ITABLE
+      IF (DEBUG(176) > 0) WRITE(ERR,1) ITABLE
       FILL(1:) = ' '
 
       DO I=1,MAX_NUM_STR
@@ -488,7 +488,7 @@
            IF ((STRE_LOC == 'CENTER  ') .AND. (TYPE(1:5) /= 'QUAD8')) THEN
               ! CQUAD4-33
   2           FORMAT(' *DEBUG:  WRITE_CQUAD4-33:  NUM=',I4, " NUM_PTS=", I4, " STRE_LOC=",A,"ITABLE=",I4)
-              WRITE(ERR,2) NUM,NUM_PTS,STRE_LOC,ITABLE
+              IF (DEBUG(176) > 0) WRITE(ERR,2) NUM,NUM_PTS,STRE_LOC,ITABLE
 
               !(eid_device,
               ! fd1, sx1, sy1, txy1, angle1, major1, minor1, vm1,
@@ -506,7 +506,7 @@
            ELSE
               ! CQUAD4-144
  3            FORMAT(' *DEBUG:  WRITE_CQUAD4-144:  NUM=',I4, " NUM_PTS=", I4, " STRE_LOC=",A,"ITABLE=",I4)
-              WRITE(ERR,3) NUM,NUM_PTS,STRE_LOC,ITABLE
+              IF (DEBUG(176) > 0) WRITE(ERR,3) NUM,NUM_PTS,STRE_LOC,ITABLE
               ELEMENT_TYPE = 144
               NUM_WIDE = 87 ! 2 + 17 * (4+1)  ! 4 nodes + 1 centroid
 
@@ -544,7 +544,7 @@
          DO I=1,NUM,NUM_PTS
  4          FORMAT(' *DEBUG:  WRITE_CQUAD4-144:  I=',I4, " K=", I4)
             K = K + 1
-            WRITE(ERR,4) I,K
+            IF (DEBUG(176) > 0) WRITE(ERR,4) I,K
             IF (WRITE_F06) WRITE(F06,*)
             IF (WRITE_F06) WRITE(F06,1403) FILL(1: 0), EID_OUT_ARRAY(I,1),(OGEL(K,J),J=1,10)
             K = K + 1
@@ -552,7 +552,7 @@
 
             DO L=1,NUM_PTS-1
                K = K + 1
-               WRITE(ERR,4) I,K
+               IF (DEBUG(176) > 0) WRITE(ERR,4) I,K
                IF (WRITE_F06) WRITE(F06,*)
                IF (DABS(POLY_FIT_ERR(I+L)) >= 0.01D0) THEN
                   IF (WRITE_F06) THEN
@@ -847,6 +847,7 @@
       USE PENTIUM_II_KIND, ONLY     :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY :  F06, OP2, ERR
       USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, OGEL
+      USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE, INTRINSIC :: IEEE_ARITHMETIC, ONLY: IEEE_Value, IEEE_QUIET_NAN
       USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: REAL32
       IMPLICIT NONE
@@ -893,7 +894,7 @@
  101      FORMAT("*DEBUG: WRITE_CSHEAR    ITABLE=",I8," (should be -5, -7,...)")
           NVALUES = NUM * NUM_WIDE
           NTOTAL = NVALUES * 4
-          WRITE(ERR,100) ITABLE,NUM,NVALUES,NTOTAL
+          IF (DEBUG(176) > 0) WRITE(ERR,100) ITABLE,NUM,NVALUES,NTOTAL
           WRITE(OP2) NVALUES
 
           ! Nastran OP2 requires this write call be a one liner...so it's a little weird...
@@ -914,7 +915,7 @@
           !Normal-X      Normal-Y      Shear-XY -> max_shear, avg_shear, margin
           WRITE(OP2) (EID_OUT_ARRAY(I,1)*10+DEVICE_CODE, REAL(OGEL(I,3), 4), REAL(OGEL(I,3), 4), &
                                                      NAN, I=1,NUM)
-          WRITE(ERR,100) ITABLE
+          IF (DEBUG(176) > 0) WRITE(ERR,100) ITABLE
       ENDIF  ! write op2
 
       DO I=1,NUM,2
@@ -985,7 +986,7 @@
 !101  FORMAT("*DEBUG: WRITE_CTRIA3    ITABLE=",I8," (should be -5, -7,...)")
       NVALUES = NUM * NUM_WIDE
       NTOTAL = NVALUES * 4
-      WRITE(ERR,100) ITABLE,NUM,NVALUES,NTOTAL
+      IF (DEBUG(176) > 0) WRITE(ERR,100) ITABLE,NUM,NVALUES,NTOTAL
 
       IF (WRITE_OP2) THEN
           !CALL GET_STRESS_CODE(STRESS_CODE, IS_VON_MISES, IS_STRAIN, IS_FIBER_DISTANCE)

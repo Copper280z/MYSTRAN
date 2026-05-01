@@ -34,7 +34,7 @@
       USE IOUNT1, ONLY                :  ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MAX_ORDER_GAUSS, MAX_STRESS_POINTS
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  ZERO, TWO, THREE
+      USE CONSTANTS_1, ONLY           :  ZERO, ONE, TWO, THREE
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE MODEL_STUF, ONLY            :  EID, ELGP, TYPE, XEL
       USE PARAMS, ONLY                :  Q4SURFIT, QUAD4TYP
@@ -59,6 +59,8 @@
       INTEGER(LONG)                   :: SF_IERR             ! Output error indicator from subr SURFACE_FIT
 
 
+      LOGICAL                         :: FAST_Q4SURFIT3
+
       REAL(DOUBLE), INTENT(IN)        :: STR_IN(NROW,NCOL)   ! Input stress/strain vals. NROW are num of diff stress/strain vals and
 !                                                              NCOL are number of points to use in the poly fit for one value
 
@@ -80,6 +82,14 @@
 
       REAL(DOUBLE)                    :: PCT_ERR_1STR        ! % error from 1 of the NROW stress/strain values
       REAL(DOUBLE)                    :: HHH(MAX_ORDER_GAUSS)! Gauss weights
+      REAL(DOUBLE)                    :: A(3,3)              ! Normal eqn matrix for direct Q4SURFIT=3 least-squares fit
+      REAL(DOUBLE)                    :: AINV(3,3)           ! Inverse of A
+      REAL(DOUBLE)                    :: B(3)                ! Coefficients in the direct plane fit
+      REAL(DOUBLE)                    :: DET                 ! Determinant of A
+      REAL(DOUBLE)                    :: DEN                 ! Denominator for poly fit percent error
+      REAL(DOUBLE)                    :: RHS(3)              ! Right-hand side for direct Q4SURFIT=3 least-squares fit
+      REAL(DOUBLE)                    :: WF                  ! Fitted value at an input point
+      REAL(DOUBLE)                    :: WI_MAX              ! Max abs value of WI
       REAL(DOUBLE)                    :: SSS(MAX_ORDER_GAUSS)! Gauss point coords
       REAL(DOUBLE)                    :: XI(NCOL-1)          ! X coords of the input  data points
       REAL(DOUBLE)                    :: YI(NCOL-1)          ! Y coords of the input  data points
@@ -150,6 +160,80 @@
             YO(I) = XEL(I,2)
          ENDDO
 
+	         FAST_Q4SURFIT3 = (Q4SURFIT == 3) .AND. (NCOL == 5) .AND.                                                               &
+	                          ((QUAD4TYP == 'MIN4  ') .OR. (QUAD4TYP == 'MITC4 ') .OR. (QUAD4TYP == 'MITC4+') .OR.                  &
+	                           (TYPE(1:6) == 'QUAD4K') .OR. (TYPE(1:5) == 'QUAD8'))
+
+	         IF (FAST_Q4SURFIT3) THEN
+! Directly solve the fixed 3-coefficient plane fit used by Q4SURFIT=3. This avoids calling the generic SURFACE_FIT routine for
+! every stress/strain component of every QUAD4 while preserving the same least-squares fit; singular cases fall through below.
+	            A(:,:) = ZERO
+	            DO J=1,NCOL-1
+               A(1,1) = A(1,1) + ONE
+               A(1,2) = A(1,2) + XI(J)
+               A(1,3) = A(1,3) + YI(J)
+               A(2,2) = A(2,2) + XI(J)*XI(J)
+               A(2,3) = A(2,3) + XI(J)*YI(J)
+               A(3,3) = A(3,3) + YI(J)*YI(J)
+            ENDDO
+            A(2,1) = A(1,2)
+            A(3,1) = A(1,3)
+            A(3,2) = A(2,3)
+
+            DET = A(1,1)*(A(2,2)*A(3,3) - A(2,3)*A(3,2))                                                                        &
+                - A(1,2)*(A(2,1)*A(3,3) - A(2,3)*A(3,1))                                                                        &
+                + A(1,3)*(A(2,1)*A(3,2) - A(2,2)*A(3,1))
+
+            IF (DABS(DET) > ZERO) THEN
+               AINV(1,1) =  (A(2,2)*A(3,3) - A(2,3)*A(3,2))/DET
+               AINV(1,2) = -(A(1,2)*A(3,3) - A(1,3)*A(3,2))/DET
+               AINV(1,3) =  (A(1,2)*A(2,3) - A(1,3)*A(2,2))/DET
+               AINV(2,1) = -(A(2,1)*A(3,3) - A(2,3)*A(3,1))/DET
+               AINV(2,2) =  (A(1,1)*A(3,3) - A(1,3)*A(3,1))/DET
+               AINV(2,3) = -(A(1,1)*A(2,3) - A(1,3)*A(2,1))/DET
+               AINV(3,1) =  (A(2,1)*A(3,2) - A(2,2)*A(3,1))/DET
+               AINV(3,2) = -(A(1,1)*A(3,2) - A(1,2)*A(3,1))/DET
+               AINV(3,3) =  (A(1,1)*A(2,2) - A(1,2)*A(2,1))/DET
+
+               PCT_ERR_MAX = ZERO
+               DO I=1,NROW
+                  RHS(:) = ZERO
+                  WI_MAX = ZERO
+                  DO J=2,NCOL
+                     RHS(1) = RHS(1) + STR_IN(I,J)
+                     RHS(2) = RHS(2) + XI(J-1)*STR_IN(I,J)
+                     RHS(3) = RHS(3) + YI(J-1)*STR_IN(I,J)
+                     IF (DABS(STR_IN(I,J)) > WI_MAX) WI_MAX = DABS(STR_IN(I,J))
+                  ENDDO
+                  B(1) = AINV(1,1)*RHS(1) + AINV(1,2)*RHS(2) + AINV(1,3)*RHS(3)
+                  B(2) = AINV(2,1)*RHS(1) + AINV(2,2)*RHS(2) + AINV(2,3)*RHS(3)
+                  B(3) = AINV(3,1)*RHS(1) + AINV(3,2)*RHS(2) + AINV(3,3)*RHS(3)
+                  IF (WI_MAX > ZERO) THEN
+                     DEN = WI_MAX
+                  ELSE
+                     DEN = ONE
+                  ENDIF
+                  DO J=2,NCOL
+                     WF = B(1) + B(2)*XI(J-1) + B(3)*YI(J-1)
+                     PCT_ERR(I,J) = 100.D0*(STR_IN(I,J) - WF)/DEN
+                     STR_OUT(I,J) = B(1) + B(2)*XO(J-1) + B(3)*YO(J-1)
+                  ENDDO
+               ENDDO
+
+               DO J=2,NCOL
+                  DO I=1,NROW
+                     IF (DABS(PCT_ERR(I,J)) > DABS(STR_OUT_PCT_ERR(J))) THEN
+                        STR_OUT_PCT_ERR(J)   = PCT_ERR(I,J)
+                        STR_OUT_ERR_INDEX(J) = I
+                     ENDIF
+                  ENDDO
+                  IF (DABS(STR_OUT_PCT_ERR(J)) > DABS(PCT_ERR_MAX)) PCT_ERR_MAX = STR_OUT_PCT_ERR(J)
+               ENDDO
+
+               RETURN
+            ENDIF
+         ENDIF
+
 ! Now do surface fit on the data (STR_IN) to get stress/strain at the elem corners (STR_OUT)
 
          PCT_ERR_MAX = ZERO
@@ -204,4 +288,3 @@
 ! **********************************************************************************************************************************
 
       END SUBROUTINE POLYNOM_FIT_STRE_STRN
-

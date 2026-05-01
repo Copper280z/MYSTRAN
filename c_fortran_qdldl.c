@@ -462,20 +462,16 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
     double    *D      = (double    *)malloc((size_t)N        * sizeof(double));
     double    *Dinv   = (double    *)malloc((size_t)N        * sizeof(double));
 
-    /* QDLDL_factor requires Li as QDLDL_int* — allocate a separate int64 buffer. */
-    QDLDL_int *Li_qdldl = (QDLDL_int *)malloc((size_t)sumLnz * sizeof(QDLDL_int));
-
     QDLDL_bool *bwork  = (QDLDL_bool *)malloc((size_t)N        * sizeof(QDLDL_bool));
     QDLDL_int  *iwork3 = (QDLDL_int  *)malloc((size_t)(3 * N)  * sizeof(QDLDL_int));
     double     *fwork  = (double     *)malloc((size_t)N        * sizeof(double));
 
-    if (!Lp || !Li_int || !Lx || !D || !Dinv || !Li_qdldl ||
-        !bwork || !iwork3 || !fwork) {
+    if (!Lp || !Li_int || !Lx || !D || !Dinv || !bwork || !iwork3 || !fwork) {
       fprintf(stderr,
               "QDLDL: failed to allocate factor storage (sumLnz=%lld, n=%d)\n",
               (long long)sumLnz, N);
       *info = -1;
-      free(Lp); free(Li_int); free(Lx); free(D); free(Dinv); free(Li_qdldl);
+      free(Lp); free(Li_int); free(Lx); free(D); free(Dinv);
       free(bwork); free(iwork3); free(fwork);
       free(etree); free(Lnz);
       free(Ap); free(Ai); free(Ax);
@@ -486,13 +482,8 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
     t_step = qdldl_step_done("allocate L/D/workspace", t_step);
 
     Lp[0] = 0;
-    QDLDL_int pos_count = QDLDL_factor(N, Ap, Ai, Ax, Lp, Li_qdldl, Lx,
+    QDLDL_int pos_count = QDLDL_factor(N, Ap, Ai, Ax, Lp, Li_int, Lx,
                                        D, Dinv, Lnz, etree, bwork, iwork3, fwork);
-
-    /* Downcast Li from int64 → int32 now that factorization is complete.  */
-    for (QDLDL_int k = 0; k < sumLnz; k++)
-      Li_int[k] = (int)Li_qdldl[k];
-    free(Li_qdldl);
 
     free(etree); free(Lnz); free(bwork); free(iwork3); free(fwork);
     free(Ap); free(Ai); free(Ax);

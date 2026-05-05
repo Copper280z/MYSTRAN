@@ -1,0 +1,10 @@
+bench_mats/
+matrices/*.mtx
+
+build/
+build-*/
+.cache/
+.claude/
+
+subprojects/*
+!subprojects/*.wrap

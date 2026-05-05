@@ -483,7 +483,7 @@
       INTEGER(LONG)            :: USR_JCT        =     0     ! User supplied (PARAM B.D. card) value for JCT - used in sort subr's
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
-      REAL(DOUBLE)             :: WINAMEM        =2147.483647! Max MB of memory that Windows XP allows for arrays
+      REAL(DOUBLE)             :: WINAMEM        =8147.483647! Max MB of memory that Windows XP allows for arrays
 
 ! ----------------------------------------------------------------------------------------------------------------------------------
       REAL(DOUBLE)             :: WTMASS         =   ONE     ! Value from PARAM WTMASS Bulk Data card

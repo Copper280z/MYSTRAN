@@ -1,0 +1,8 @@
+[wrap-file]
+directory = benchmark-1.8.3
+source_url = https://github.com/google/benchmark/archive/refs/tags/v1.8.3.tar.gz
+source_filename = benchmark-1.8.3.tar.gz
+source_hash = 6bc180a57d23d4d9515519f92b0c83d61b05b5bab188961f36ac7b06b0d9e9ce
+
+[provide]
+benchmark = google_benchmark_dep

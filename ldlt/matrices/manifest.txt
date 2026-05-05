@@ -1,0 +1,19 @@
+# SuiteSparse Matrix Collection fixtures.
+# Format: group/name (use with fetch_suitesparse.py)
+HB/bcsstk01
+HB/bcsstk14
+Boeing/msc00726
+Boeing/pwtk
+Boeing/ct20stif
+UTEP/Dubcova2
+GHS_psdef/bmwcra_1
+GHS_psdef/inline_1
+Mazaheri/bundle_adj
+Bai/pde2961
+VDOL/dynamicSoaringProblem_4
+Schenk_IBMNA/c-27
+GHS_psdef/oilpan
+Precima/analytics
+Schenk_IBMNA/c-big
+GHS_indef/dawson5
+GHS_indef/bmw3_2

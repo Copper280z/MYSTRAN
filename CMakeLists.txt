@@ -427,15 +427,25 @@ else()
   set(SLU_DRIVER "${SUPERLU_DIR}/FORTRAN/c_fortran_dgssv.c")
 endif()
 
-# QDLDL sparse LDL^T solver
+# Experimental sparse LDL^T solver (drop-in replacement for QDLDL)
 set(QDLDL_DIR "${PROJECT_SOURCE_DIR}/qdldl")
-include_directories("${QDLDL_DIR}/include")
+set(LDLT_DIR "${PROJECT_SOURCE_DIR}/ldlt")
+include_directories("${LDLT_DIR}/include" "${LDLT_DIR}/src")
 if(TPL_ENABLE_METISLIB)
   include_directories("${TPL_METIS_INCLUDE_DIRS}")
 endif()
 set(QDLDL_SOURCES
-  "${QDLDL_DIR}/src/qdldl.c"
-  "${QDLDL_DIR}/fortran/c_fortran_qdldl.c"
+  "${QDLDL_DIR}/fortran/c_fortran_ldlt.c"
+  "${LDLT_DIR}/src/util.c"
+  "${LDLT_DIR}/src/perm.c"
+  "${LDLT_DIR}/src/etree.c"
+  "${LDLT_DIR}/src/symbolic.c"
+  "${LDLT_DIR}/src/ordering.c"
+  "${LDLT_DIR}/src/amd_stub.c"
+  "${LDLT_DIR}/src/factor.c"
+  "${LDLT_DIR}/src/factor_kernels.c"
+  "${LDLT_DIR}/src/solve.c"
+  "${LDLT_DIR}/src/io_mm.c"
 )
 
 # set some extra vars for MSYS builds to make the binary portable
@@ -454,6 +464,10 @@ file(GLOB_RECURSE ALL_FORTRAN_FILES
   "${CMAKE_SOURCE_DIR}/*.f03"
   "${CMAKE_SOURCE_DIR}/*.F03"
 )
+
+if(_MYSTRAN_BLAS_LAPACK_MODE STREQUAL "EMBEDDED")
+  list(APPEND QDLDL_SOURCES "${LDLT_DIR}/src/blas_ref.c")
+endif()
 
 # prepare the main executable, linked against the specifics and the m
 # it appears utils used to be a module, but that is no longer the case?
@@ -482,6 +496,27 @@ if(USE_SUPERLU_MT)
   endif()
 else()
   target_link_libraries(mystran superlu)
+endif()
+
+if(TPL_ENABLE_METISLIB)
+  target_compile_definitions(mystran PRIVATE LDLT_HAVE_METIS=1)
+  target_link_libraries(mystran metis GKlib)
+endif()
+
+if(_MYSTRAN_BLAS_LAPACK_MODE STREQUAL "SYSTEM")
+  target_compile_definitions(mystran PRIVATE LDLT_USE_SYSTEM_BLAS=1)
+
+  if(APPLE)
+    target_compile_definitions(mystran PRIVATE LDLT_BLAS_ACCELERATE=1)
+    set_source_files_properties(
+      "${LDLT_DIR}/src/factor.c"
+      "${LDLT_DIR}/src/factor_kernels.c"
+      "${LDLT_DIR}/src/solve.c"
+      PROPERTIES COMPILE_OPTIONS "-Wno-deprecated-declarations"
+    )
+  endif()
+else()
+  target_compile_definitions(mystran PRIVATE LDLT_USE_SYSTEM_BLAS=0)
 endif()
 
 # Link LAPACK first, then BLAS: LAPACK depends on BLAS so the linker

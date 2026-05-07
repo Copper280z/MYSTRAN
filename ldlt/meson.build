@@ -1,7 +1,7 @@
 project('ldlt', 'c', 'cpp',
   version: '0.1.0',
   default_options: [
-    'c_std=c2x',
+    'c_std=c11',
     'cpp_std=c++20',
     'warning_level=2',
     'b_ndebug=if-release',
@@ -10,7 +10,13 @@ project('ldlt', 'c', 'cpp',
 )
 
 cc = meson.get_compiler('c')
-add_project_arguments('-D_POSIX_C_SOURCE=200809L', language: 'c')
+posix_defs = []
+if host_machine.system() != 'windows'
+  posix_defs += '-DLDLT_USE_POSIX_SIGNALS=1'
+  if host_machine.system() != 'darwin'
+    add_project_arguments('-D_POSIX_C_SOURCE=200809L', language: 'c')
+  endif
+endif
 
 # Tuning flags applied to all targets (release builds benefit most).
 tuning_args = []
@@ -27,23 +33,31 @@ endif
 # ---- BLAS ----
 blas_opt = get_option('blas')
 blas_dep = dependency('', required: false)
+blas_deps = []
 use_system_blas = false
 if blas_opt != 'reference'
   # Prefer Accelerate on macOS, then generic blas/cblas.
   if host_machine.system() == 'darwin'
     blas_dep = dependency('Accelerate', required: false)
+    use_system_blas = blas_dep.found()
   endif
-  if not blas_dep.found()
-    blas_dep = dependency('cblas', required: false)
-  endif
-  if not blas_dep.found()
-    blas_dep = dependency('openblas', required: false)
-  endif
-  if not blas_dep.found()
-    blas_dep = dependency('blas', required: false)
-  endif
-  if blas_dep.found()
-    use_system_blas = true
+  foreach blas_name : ['cblas', 'openblas', 'blas']
+    if not use_system_blas
+      candidate_dep = dependency(blas_name, required: false)
+      if candidate_dep.found() and cc.has_header('cblas.h', dependencies: candidate_dep) and cc.has_function('cblas_dgemm', prefix: '#include <cblas.h>', dependencies: candidate_dep)
+        blas_dep = candidate_dep
+        use_system_blas = true
+      endif
+    endif
+  endforeach
+  if use_system_blas
+    blas_deps += blas_dep
+    if host_machine.system() != 'darwin'
+      lapack_dep = dependency('lapack', required: false)
+      if lapack_dep.found()
+        blas_deps += lapack_dep
+      endif
+    endif
   elif blas_opt == 'system'
     error('blas=system but no system BLAS found')
   endif
@@ -96,11 +110,16 @@ if get_option('with_openmp')
   omp_dep = dependency('openmp', required: false)
 endif
 omp_defs = omp_dep.found() ? ['-DLDLT_HAVE_OPENMP=1'] : []
+ldlt_defs = blas_defs + ord_defs + omp_defs + posix_defs
+ldlt_deps = blas_deps + [amd_dep, metis_dep, omp_dep]
+ldlt_c_args = ldlt_defs
+if use_system_blas and host_machine.system() == 'darwin'
+  ldlt_c_args += '-Wno-deprecated-declarations'
+endif
 
 ldlt_inc = include_directories('include', 'src')
 
 ldlt_sources = files(
-  'src/blas_ref.c',
   'src/util.c',
   'src/perm.c',
   'src/etree.c',
@@ -112,23 +131,42 @@ ldlt_sources = files(
   'src/solve.c',
   'src/io_mm.c',
 )
+if not use_system_blas
+  ldlt_sources += files('src/blas_ref.c')
+endif
 
 ldlt_lib = static_library('ldlt',
   ldlt_sources,
   include_directories: ldlt_inc,
-  c_args: blas_defs + ord_defs + omp_defs,
-  dependencies: [blas_dep, amd_dep, metis_dep, omp_dep],
+  c_args: ldlt_c_args,
+  dependencies: ldlt_deps,
   install: true,
 )
 
 ldlt_dep = declare_dependency(
   link_with: ldlt_lib,
   include_directories: ldlt_inc,
-  compile_args: blas_defs + ord_defs + omp_defs,
-  dependencies: [blas_dep, amd_dep, metis_dep, omp_dep],
+  compile_args: ldlt_defs,
+  dependencies: ldlt_deps,
 )
 
 install_headers('include/ldlt/ldlt.h', subdir: 'ldlt')
+
+if get_option('with_fortran_interface')
+  ldlt_fortran_lib = static_library('ldlt_fortran',
+    files('fortran/c_fortran_ldlt.c'),
+    include_directories: ldlt_inc,
+    c_args: ldlt_c_args,
+    install: true,
+  )
+
+  ldlt_fortran_dep = declare_dependency(
+    link_with: [ldlt_fortran_lib, ldlt_lib],
+    include_directories: ldlt_inc,
+    compile_args: ldlt_defs,
+    dependencies: ldlt_deps,
+  )
+endif
 
 if get_option('with_tests')
   subdir('tests')

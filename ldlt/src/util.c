@@ -1,19 +1,24 @@
 #include "internal.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
-#if defined(__APPLE__)
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif defined(__APPLE__)
 #include <mach/mach.h>
 #include <mach/mach_host.h>
 #elif defined(__linux__)
 #include <sys/sysinfo.h>
 #endif
 
-#if defined(_MSC_VER)
-__declspec(thread) static ldlt_error_trap *g_error_trap = NULL;
-#else
-static __thread ldlt_error_trap *g_error_trap = NULL;
-#endif
+static LDLT_THREAD_LOCAL ldlt_error_trap *g_error_trap = NULL;
 
 void ldlt_push_error_trap(ldlt_error_trap *trap) {
     if (!trap) return;
@@ -64,21 +69,32 @@ void *ldlt_xrealloc(void *p, size_t bytes) {
 }
 
 uint64_t ldlt_available_memory_bytes(void) {
-#if defined(__APPLE__)
+#if defined(_WIN32)
+    MEMORYSTATUSEX statex;
+    statex.dwLength = sizeof(statex);
+    if (!GlobalMemoryStatusEx(&statex))
+        return 0;
+    return (uint64_t)statex.ullAvailPhys;
+#elif defined(__APPLE__)
     mach_port_t host = mach_host_self();
     vm_size_t page_size = 0;
     vm_statistics64_data_t vmstat;
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
 
-    if (host_page_size(host, &page_size) != KERN_SUCCESS)
+    if (host_page_size(host, &page_size) != KERN_SUCCESS) {
+        mach_port_deallocate(mach_task_self(), host);
         return 0;
+    }
     if (host_statistics64(host, HOST_VM_INFO64, (host_info64_t)&vmstat,
-                          &count) != KERN_SUCCESS)
+                          &count) != KERN_SUCCESS) {
+        mach_port_deallocate(mach_task_self(), host);
         return 0;
+    }
 
     uint64_t pages = (uint64_t)vmstat.free_count
                    + (uint64_t)vmstat.inactive_count
                    + (uint64_t)vmstat.speculative_count;
+    mach_port_deallocate(mach_task_self(), host);
     return pages * (uint64_t)page_size;
 #elif defined(__linux__)
     struct sysinfo si;
@@ -87,6 +103,29 @@ uint64_t ldlt_available_memory_bytes(void) {
     return (uint64_t)si.freeram * (uint64_t)si.mem_unit;
 #else
     return 0;
+#endif
+}
+
+double ldlt_wall_time_seconds(void) {
+#if defined(_WIN32)
+    static LARGE_INTEGER freq;
+    static int initialized = 0;
+    LARGE_INTEGER now;
+    if (!initialized) {
+        if (!QueryPerformanceFrequency(&freq))
+            return (double)clock() / (double)CLOCKS_PER_SEC;
+        initialized = 1;
+    }
+    if (!QueryPerformanceCounter(&now))
+        return (double)clock() / (double)CLOCKS_PER_SEC;
+    return (double)now.QuadPart / (double)freq.QuadPart;
+#elif defined(TIME_UTC)
+    struct timespec ts;
+    if (timespec_get(&ts, TIME_UTC) == TIME_UTC)
+        return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+    return (double)clock() / (double)CLOCKS_PER_SEC;
+#else
+    return (double)clock() / (double)CLOCKS_PER_SEC;
 #endif
 }
 

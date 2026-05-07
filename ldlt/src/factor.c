@@ -6,7 +6,6 @@
 #include "blas_shim.h"
 #include <math.h>
 #include <stdio.h>
-#include <time.h>
 
 #if LDLT_HAVE_OPENMP
 #include <omp.h>
@@ -71,9 +70,7 @@ typedef struct {
 
 static double prof_now_sec(void)
 {
-    struct timespec ts;
-    timespec_get(&ts, TIME_UTC);
-    return (double)ts.tv_sec + 1e-9 * (double)ts.tv_nsec;
+    return ldlt_wall_time_seconds();
 }
 
 static void pivot_profile_init(pivot_profile *P)

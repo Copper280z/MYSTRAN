@@ -2,8 +2,10 @@ option('blas', type: 'combo', choices: ['auto', 'system', 'reference'], value: '
        description: 'BLAS backend: auto detects system BLAS, falls back to reference')
 option('ordering', type: 'combo', choices: ['auto', 'amd', 'metis', 'internal'], value: 'auto',
        description: 'Default fill-reducing ordering library')
-option('with_tests', type: 'boolean', value: true)
-option('with_bench', type: 'boolean', value: true)
+option('with_tests', type: 'boolean', value: false)
+option('with_bench', type: 'boolean', value: false)
+option('with_fortran_interface', type: 'boolean', value: true,
+       description: 'Build the Fortran-callable QDLDL-compatible LDLT bridge')
 option('with_openmp', type: 'boolean', value: true)
 option('large_matrices', type: 'boolean', value: false,
        description: 'Enable large SuiteSparse fixtures in tests/bench')

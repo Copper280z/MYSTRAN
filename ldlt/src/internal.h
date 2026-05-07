@@ -19,6 +19,21 @@
 #ifndef LDLT_HAVE_OPENMP
 #define LDLT_HAVE_OPENMP 0
 #endif
+#ifndef LDLT_USE_POSIX_SIGNALS
+#define LDLT_USE_POSIX_SIGNALS 0
+#endif
+
+#ifndef LDLT_THREAD_LOCAL
+#if defined(_MSC_VER)
+#define LDLT_THREAD_LOCAL __declspec(thread)
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
+#define LDLT_THREAD_LOCAL _Thread_local
+#elif defined(__GNUC__) || defined(__clang__)
+#define LDLT_THREAD_LOCAL __thread
+#else
+#define LDLT_THREAD_LOCAL
+#endif
+#endif
 
 /* ---- ldlt_symbolic / ldlt_numeric internals ---- */
 
@@ -91,6 +106,7 @@ void *ldlt_xmalloc(size_t bytes);
 void *ldlt_xcalloc(size_t n, size_t sz);
 void *ldlt_xrealloc(void *p, size_t bytes);
 uint64_t ldlt_available_memory_bytes(void);
+double ldlt_wall_time_seconds(void);
 
 /* etree.c */
 ldlt_status ldlt_etree(int32_t n, const int32_t *Ap, const int32_t *Ai, int32_t *parent);

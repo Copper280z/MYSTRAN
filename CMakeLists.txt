@@ -428,14 +428,13 @@ else()
 endif()
 
 # Experimental sparse LDL^T solver (drop-in replacement for QDLDL)
-set(QDLDL_DIR "${PROJECT_SOURCE_DIR}/qdldl")
 set(LDLT_DIR "${PROJECT_SOURCE_DIR}/ldlt")
 include_directories("${LDLT_DIR}/include" "${LDLT_DIR}/src")
 if(TPL_ENABLE_METISLIB)
   include_directories("${TPL_METIS_INCLUDE_DIRS}")
 endif()
-set(QDLDL_SOURCES
-  "${QDLDL_DIR}/fortran/c_fortran_ldlt.c"
+set(LDLT_SOURCES
+  "${LDLT_DIR}/fortran/c_fortran_ldlt.c"
   "${LDLT_DIR}/src/util.c"
   "${LDLT_DIR}/src/perm.c"
   "${LDLT_DIR}/src/etree.c"
@@ -465,8 +464,32 @@ file(GLOB_RECURSE ALL_FORTRAN_FILES
   "${CMAKE_SOURCE_DIR}/*.F03"
 )
 
-if(_MYSTRAN_BLAS_LAPACK_MODE STREQUAL "EMBEDDED")
-  list(APPEND QDLDL_SOURCES "${LDLT_DIR}/src/blas_ref.c")
+set(LDLT_USE_SYSTEM_CBLAS FALSE)
+set(LDLT_CBLAS_INCLUDE_DIR "")
+if(_MYSTRAN_BLAS_LAPACK_MODE STREQUAL "SYSTEM")
+  if(APPLE)
+    set(LDLT_USE_SYSTEM_CBLAS TRUE)
+  else()
+    find_path(LDLT_CBLAS_INCLUDE_DIR NAMES cblas.h)
+    if(LDLT_CBLAS_INCLUDE_DIR)
+      set(_ldlt_old_required_includes "${CMAKE_REQUIRED_INCLUDES}")
+      set(_ldlt_old_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+      set(CMAKE_REQUIRED_INCLUDES "${LDLT_CBLAS_INCLUDE_DIR}")
+      set(CMAKE_REQUIRED_LIBRARIES "${TPL_BLAS_LIBRARIES}")
+      check_function_exists(cblas_dgemm LDLT_HAVE_CBLAS_DGEMM)
+      set(CMAKE_REQUIRED_INCLUDES "${_ldlt_old_required_includes}")
+      set(CMAKE_REQUIRED_LIBRARIES "${_ldlt_old_required_libraries}")
+      unset(_ldlt_old_required_includes)
+      unset(_ldlt_old_required_libraries)
+      if(LDLT_HAVE_CBLAS_DGEMM)
+        set(LDLT_USE_SYSTEM_CBLAS TRUE)
+      endif()
+    endif()
+  endif()
+endif()
+
+if(NOT LDLT_USE_SYSTEM_CBLAS)
+  list(APPEND LDLT_SOURCES "${LDLT_DIR}/src/blas_ref.c")
 endif()
 
 # prepare the main executable, linked against the specifics and the m
@@ -477,7 +500,7 @@ add_executable(
   mystran
   ${ALL_FORTRAN_FILES}
   ${SLU_DRIVER}
-  ${QDLDL_SOURCES}
+  ${LDLT_SOURCES}
 )
 
 # determine which superlu variant to link against
@@ -503,9 +526,21 @@ if(TPL_ENABLE_METISLIB)
   target_link_libraries(mystran metis GKlib)
 endif()
 
-if(_MYSTRAN_BLAS_LAPACK_MODE STREQUAL "SYSTEM")
-  target_compile_definitions(mystran PRIVATE LDLT_USE_SYSTEM_BLAS=1)
+if(NOT WIN32)
+  target_compile_definitions(mystran PRIVATE LDLT_USE_POSIX_SIGNALS=1)
+  if(NOT APPLE)
+    set_source_files_properties(
+      "${LDLT_DIR}/src/ordering.c"
+      PROPERTIES COMPILE_DEFINITIONS "_POSIX_C_SOURCE=200809L"
+    )
+  endif()
+endif()
 
+if(LDLT_USE_SYSTEM_CBLAS)
+  target_compile_definitions(mystran PRIVATE LDLT_USE_SYSTEM_BLAS=1)
+  if(LDLT_CBLAS_INCLUDE_DIR)
+    target_include_directories(mystran PRIVATE "${LDLT_CBLAS_INCLUDE_DIR}")
+  endif()
   if(APPLE)
     target_compile_definitions(mystran PRIVATE LDLT_BLAS_ACCELERATE=1)
     set_source_files_properties(

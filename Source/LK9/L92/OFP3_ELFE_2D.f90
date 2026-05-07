@@ -39,12 +39,12 @@
       USE FEMAP_ARRAYS, ONLY          :  FEMAP_EL_NUMS, FEMAP_EL_VECS
       USE PARAMS, ONLY                :  OTMSKIP, PRTNEU
       use model_stuf, only            :  pcomp_props
-      USE MODEL_STUF, ONLY            :  ANY_ELFE_OUTPUT, ANY_STRE_OUTPUT, ANY_STRN_OUTPUT, EDAT, EPNT, ETYPE, FCONV, EID, ELMTYP,  &
-                                         ELOUT, METYPE, NUM_EMG_FATAL_ERRS, PLY_NUM, TYPE, STRESS, STRAIN, SHELL_STR_ANGLE,         &
+      USE MODEL_STUF, ONLY            :  ANY_ELFE_OUTPUT, ANY_STRE_OUTPUT, ANY_STRN_OUTPUT, EDAT, EPNT, ETYPE, FCONV, EID, ELMTYP, &
+                                         ELOUT, METYPE, NUM_EMG_FATAL_ERRS, PLY_NUM, TYPE, STRESS, STRAIN, SHELL_STR_ANGLE,        &
                                          NUM_SEi, ELGP, AGRID
       USE CC_OUTPUT_DESCRIBERS, ONLY  :  FORC_LOC, STRE_LOC, STRN_LOC
-      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, STRE_OUT_CACHE, STRE_OUT_CACHE_ERR,            &
-                                         STRE_OUT_CACHE_ERR_INDEX, STRE_OUT_CACHE_ROWS, STRE_OUT_CACHE_VALID, STRN_OUT_CACHE,       &
+      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, STRE_OUT_CACHE, STRE_OUT_CACHE_ERR,           &
+                                         STRE_OUT_CACHE_ERR_INDEX, STRE_OUT_CACHE_ROWS, STRE_OUT_CACHE_VALID, STRN_OUT_CACHE,      &
                                          STRN_OUT_CACHE_ERR, STRN_OUT_CACHE_ERR_INDEX, STRN_OUT_CACHE_ROWS, STRN_OUT_CACHE_VALID
       USE OUTPUT4_MATRICES, ONLY      :  OTM_ELFE, TXT_ELFE
 
@@ -250,7 +250,7 @@ elems_3: DO J = 1,NELE
                               CALL POLYNOM_FIT_STRE_STRN ( STRESS_RAW, 9, NUM_PTS(I), STRESS_OUT, STRESS_OUT_PCT_ERR,              &
                                     STRESS_OUT_ERR_INDEX, PCT_ERR_MAX )
                               IF (CACHE_STRE_STRN_OUT) THEN
-                                 CALL POLYNOM_FIT_STRE_STRN ( STRAIN_RAW, 9, NUM_PTS(I), STRAIN_OUT, STRAIN_OUT_PCT_ERR,            &
+                                 CALL POLYNOM_FIT_STRE_STRN ( STRAIN_RAW, 9, NUM_PTS(I), STRAIN_OUT, STRAIN_OUT_PCT_ERR,           &
                                        STRAIN_OUT_ERR_INDEX, PCT_ERR_MAX )
                               ENDIF
 

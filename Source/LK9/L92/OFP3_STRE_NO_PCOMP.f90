@@ -41,13 +41,13 @@
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE FEMAP_ARRAYS, ONLY          :  FEMAP_EL_NUMS
       USE PARAMS, ONLY                :  OTMSKIP, PRTNEU
-      USE MODEL_STUF, ONLY            :  AGRID, ANY_STRE_OUTPUT, ANY_STRN_OUTPUT, EDAT, EPNT, ETYPE, EID, ELGP, ELMTYP, ELOUT,      &
-                                         METYPE, NUM_SEi, NUM_EMG_FATAL_ERRS, PCOMP_PROPS, PLY_NUM, STRESS, STRAIN, TYPE,           &
+      USE MODEL_STUF, ONLY            :  AGRID, ANY_STRE_OUTPUT, ANY_STRN_OUTPUT, EDAT, EPNT, ETYPE, EID, ELGP, ELMTYP, ELOUT,     &
+                                         METYPE, NUM_SEi, NUM_EMG_FATAL_ERRS, PCOMP_PROPS, PLY_NUM, STRESS, STRAIN, TYPE,          &
                                          SHELL_STR_ANGLE
       USE CC_OUTPUT_DESCRIBERS, ONLY  :  STRE_LOC, STRE_OPT, STRN_LOC
-      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX,              &
-                                         STRN_OUT_CACHE, STRN_OUT_CACHE_ERR, STRN_OUT_CACHE_ERR_INDEX, STRN_OUT_CACHE_ROWS,         &
-                                         STRN_OUT_CACHE_VALID, STRE_OUT_CACHE, STRE_OUT_CACHE_ERR, STRE_OUT_CACHE_ERR_INDEX,        &
+      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX,             &
+                                         STRN_OUT_CACHE, STRN_OUT_CACHE_ERR, STRN_OUT_CACHE_ERR_INDEX, STRN_OUT_CACHE_ROWS,        &
+                                         STRN_OUT_CACHE_VALID, STRE_OUT_CACHE, STRE_OUT_CACHE_ERR, STRE_OUT_CACHE_ERR_INDEX,       &
                                          STRE_OUT_CACHE_ROWS, STRE_OUT_CACHE_VALID
       USE OUTPUT4_MATRICES, ONLY      :  OTM_STRE, TXT_STRE
 

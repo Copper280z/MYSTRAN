@@ -52,8 +52,12 @@ if(NOT LDLT_BLAS_UPPER STREQUAL "REFERENCE")
   endif()
 
   if(NOT ldlt_use_system_blas)
-    find_path(LDLT_CBLAS_INCLUDE_DIR NAMES cblas.h)
-    find_library(LDLT_CBLAS_LIBRARY NAMES cblas openblas)
+    find_path(LDLT_CBLAS_INCLUDE_DIR NAMES cblas.h
+      HINTS /usr/include /usr/local/include
+      PATH_SUFFIXES x86_64-linux-gnu openblas openblas-pthread openblas-openmp)
+    find_library(LDLT_CBLAS_LIBRARY NAMES openblas cblas
+      HINTS /usr/lib /usr/local/lib
+      PATH_SUFFIXES x86_64-linux-gnu openblas-pthread openblas-openmp)
     find_package(LAPACK QUIET)
     if(LDLT_CBLAS_INCLUDE_DIR AND LDLT_CBLAS_LIBRARY)
       set(_ldlt_old_required_includes "${CMAKE_REQUIRED_INCLUDES}")

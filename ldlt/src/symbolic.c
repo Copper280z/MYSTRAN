@@ -364,13 +364,6 @@ ldlt_status ldlt_build_symbolic(int32_t n, const int32_t *Ap, const int32_t *Ai,
         (void)k;
     }
     if (rows_pool_cap < 1) rows_pool_cap = 1;
-    if (rows_pool_cap > INT32_MAX) {
-        fprintf(stderr,
-                "ldlt: symbolic row pool requires %lld rows, exceeding 32-bit internal indexing.\n",
-                (long long)rows_pool_cap);
-        free(rowmark); free(Lp); free(Li); free(Bp); free(Bi); free(sn_first);
-        return LDLT_ERR_NOMEM;
-    }
     S->rows_pool = (int32_t*)ldlt_xmalloc((size_t)rows_pool_cap * sizeof(int32_t));
     int64_t roff = 0;
 
@@ -384,7 +377,7 @@ ldlt_status ldlt_build_symbolic(int32_t n, const int32_t *Ap, const int32_t *Ai,
         S->super[s].first_col = fc;
         S->super[s].width = k;
         S->super[s].nrows_below = m;
-        S->super[s].row_off = (int32_t)roff;
+        S->super[s].row_off = roff;
         S->super[s].sn_perm = NULL; /* local supernode permutation reserved */
         roff += m;
         S->panel_off[s+1] = S->panel_off[s] + (int64_t)(k + m) * k;
@@ -485,7 +478,7 @@ ldlt_status ldlt_build_symbolic(int32_t n, const int32_t *Ap, const int32_t *Ai,
     for (int32_t i = 0; i < nsuper; ++i) last[i] = -1;
     /* Count */
     for (int32_t d = 0; d < nsuper; ++d) {
-        int32_t off = S->super[d].row_off, m = S->super[d].nrows_below;
+        int64_t off = S->super[d].row_off; int32_t m = S->super[d].nrows_below;
         for (int32_t t = 0; t < m; ++t) {
             int32_t r = S->rows_pool[off + t];
             int32_t s = col_to_super[r];
@@ -499,7 +492,7 @@ ldlt_status ldlt_build_symbolic(int32_t n, const int32_t *Ap, const int32_t *Ai,
     memcpy(cur, S->upd_ptr, (size_t)nsuper * sizeof(int32_t));
     for (int32_t i = 0; i < nsuper; ++i) last[i] = -1;
     for (int32_t d = 0; d < nsuper; ++d) {
-        int32_t off = S->super[d].row_off, m = S->super[d].nrows_below;
+        int64_t off = S->super[d].row_off; int32_t m = S->super[d].nrows_below;
         for (int32_t t = 0; t < m; ++t) {
             int32_t r = S->rows_pool[off + t];
             int32_t s = col_to_super[r];

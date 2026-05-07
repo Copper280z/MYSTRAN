@@ -1,6 +1,5 @@
 #include "internal.h"
 #include <limits.h>
-#include <signal.h>
 #include <stdio.h>
 
 #if LDLT_HAVE_AMD
@@ -10,7 +9,18 @@
 #include <metis.h>
 #endif
 
-#if LDLT_HAVE_METIS
+#if LDLT_HAVE_METIS && LDLT_USE_POSIX_SIGNALS
+#include <signal.h>
+#if defined(SIGBUS) && defined(SIGSEGV)
+#define LDLT_METIS_SIGNAL_TRAP 1
+#else
+#define LDLT_METIS_SIGNAL_TRAP 0
+#endif
+#else
+#define LDLT_METIS_SIGNAL_TRAP 0
+#endif
+
+#if LDLT_HAVE_METIS && LDLT_METIS_SIGNAL_TRAP
 static sigjmp_buf g_metis_jmp;
 static volatile sig_atomic_t g_metis_signal = 0;
 static struct sigaction g_old_sigbus;
@@ -34,7 +44,9 @@ static void restore_metis_fault_handlers(void) {
     sigaction(SIGBUS, &g_old_sigbus, NULL);
     sigaction(SIGSEGV, &g_old_sigsegv, NULL);
 }
+#endif
 
+#if LDLT_HAVE_METIS
 static double metis_memory_factor(void) {
     const char *env = getenv("LDLT_METIS_MEMORY_FACTOR");
     if (!env || !*env) return 16.0;
@@ -154,6 +166,7 @@ static ldlt_status order_metis(int32_t n, const int32_t *Ap, const int32_t *Ai, 
     }
     idx_t nn = n;
     int rc;
+#if LDLT_METIS_SIGNAL_TRAP
     g_metis_signal = 0;
     if (sigsetjmp(g_metis_jmp, 1) == 0) {
         install_metis_fault_handlers();
@@ -166,6 +179,9 @@ static ldlt_status order_metis(int32_t n, const int32_t *Ap, const int32_t *Ai, 
                 (int)g_metis_signal);
         rc = METIS_ERROR_MEMORY;
     }
+#else
+    rc = METIS_NodeND(&nn, (idx_t*)Fp, (idx_t*)Fi, NULL, opts, p, iperm);
+#endif
     if (rc == METIS_OK) for (int32_t i = 0; i < n; ++i) perm[i] = (int32_t)p[i];
     free(p); free(iperm); free(Fp); free(Fi);
     if (rc == METIS_OK) return LDLT_OK;

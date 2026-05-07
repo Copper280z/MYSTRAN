@@ -35,7 +35,7 @@
       USE TIMDAT, ONLY                :  TSEC
       USE LINK9_STUFF, ONLY           :  GID_OUT_ARRAY, EID_OUT_ARRAY, FTNAME, MAXREQ, MSPRNT, OGEL, POLY_FIT_ERR,                 &
                                          POLY_FIT_ERR_INDEX, STRN_OUT_CACHE, STRN_OUT_CACHE_ERR, STRN_OUT_CACHE_ERR_INDEX,         &
-                                         STRN_OUT_CACHE_ROWS, STRN_OUT_CACHE_VALID, STRE_OUT_CACHE, STRE_OUT_CACHE_ERR,             &
+                                         STRN_OUT_CACHE_ROWS, STRN_OUT_CACHE_VALID, STRE_OUT_CACHE, STRE_OUT_CACHE_ERR,            &
                                          STRE_OUT_CACHE_ERR_INDEX, STRE_OUT_CACHE_ROWS, STRE_OUT_CACHE_VALID
 
       USE ALLOCATE_LINK9_STUF_USE_IFs

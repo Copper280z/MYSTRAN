@@ -207,8 +207,10 @@ ldlt_status ldlt_build_symbolic(int32_t n, const int32_t *Ap, const int32_t *Ai,
 
     int32_t *perm0 = (int32_t*)ldlt_xmalloc((size_t)n * sizeof(int32_t));
     int32_t *iperm0 = (int32_t*)ldlt_xmalloc((size_t)n * sizeof(int32_t));
+    double t_ord0 = ldlt_wall_time_seconds();
     ldlt_status st = ldlt_compute_ordering(n, Ap, Ai, opt, perm0);
     if (st != LDLT_OK) { free(perm0); free(iperm0); return st; }
+    printf("LDLT %-39s %8.3f s\n", "analyze: ordering", ldlt_wall_time_seconds() - t_ord0);
     for (int32_t i = 0; i < n; ++i) iperm0[perm0[i]] = i;
 
     int32_t *B0p=NULL, *B0i=NULL;

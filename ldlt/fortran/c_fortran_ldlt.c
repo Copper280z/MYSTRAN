@@ -26,19 +26,47 @@
 
 #include "internal.h"
 
-/* Pointer-sized integer to pass handles back to Fortran as INTEGER(DBL_LONG). */
+/* OpenBLAS exposes openblas_set_num_threads() when linked directly.
+ * Declare it weakly so the code works with other BLAS implementations too. */
+#if LDLT_USE_SYSTEM_BLAS
+extern void openblas_set_num_threads(int) __attribute__((weak));
+extern int  openblas_get_num_threads(void) __attribute__((weak));
+#endif
+
+static void blas_set_single_threaded(int *saved) {
+#if LDLT_USE_SYSTEM_BLAS
+    if (openblas_get_num_threads) {
+        *saved = openblas_get_num_threads();
+        openblas_set_num_threads(1);
+    } else {
+        *saved = -1;
+    }
+#else
+    *saved = -1;
+#endif
+}
+
+static void blas_restore_threads(int saved) {
+#if LDLT_USE_SYSTEM_BLAS
+    if (saved > 0 && openblas_set_num_threads)
+        openblas_set_num_threads(saved);
+#else
+    (void)saved;
+#endif
+}
+
+/* Pointer-sized integer to pass handles back to Fortran as INTEGER(DBL_LONG).
+ */
 typedef intptr_t fptr;
 
 static int s_last_neg_count = 0;
 
 typedef struct {
   ldlt_symbolic *S;
-  ldlt_numeric  *N;
+  ldlt_numeric *N;
 } ldlt_factors_t;
 
-static double now_sec(void) {
-  return ldlt_wall_time_seconds();
-}
+static double now_sec(void) { return ldlt_wall_time_seconds(); }
 
 static double step_done(const char *label, double t0) {
   double t1 = now_sec();
@@ -122,6 +150,9 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
   *info = 0;
 
   if (*iopt == 1) {
+#if !LDLT_USE_SYSTEM_BLAS
+    printf("LDLT WARNING: This LDLT was built with the slow reference BLAS\n");
+#endif
     int N = *n;
     int NNZ = *nnz;
     double t0 = now_sec();
@@ -135,7 +166,8 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
     fflush(stdout);
 
     if (N < 0 || NNZ < 0) {
-      fprintf(stderr, "LDLT: invalid matrix dimensions (n=%d, nnz=%d).\n", N, NNZ);
+      fprintf(stderr, "LDLT: invalid matrix dimensions (n=%d, nnz=%d).\n", N,
+              NNZ);
       *info = -1;
       return;
     }
@@ -170,7 +202,8 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
         if (i >= col_idx[k]) {
           nnz_lt64++;
           if (nnz_lt64 > INT32_MAX) {
-            fprintf(stderr, "LDLT: lower-triangular matrix exceeds 32-bit indexing.\n");
+            fprintf(stderr,
+                    "LDLT: lower-triangular matrix exceeds 32-bit indexing.\n");
             *info = -1;
             free(row_ptr);
             free(col_idx);
@@ -183,7 +216,7 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
 
     int32_t *Ap = (int32_t *)malloc_array((size_t)N + 1, sizeof(int32_t));
     int32_t *Ai = (int32_t *)malloc_array((size_t)nnz_lt, sizeof(int32_t));
-    double  *Ax = (double  *)malloc_array((size_t)nnz_lt, sizeof(double));
+    double *Ax = (double *)malloc_array((size_t)nnz_lt, sizeof(double));
     if (!Ap || !Ai || !Ax) {
       *info = -1;
       free(row_ptr);
@@ -211,8 +244,13 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
     ldlt_options_default(&opt);
 #if LDLT_HAVE_METIS
     opt.ordering = LDLT_ORDER_METIS;
+    printf("LDLT ordering: METIS nested dissection\n");
+#elif LDLT_HAVE_AMD
+    opt.ordering = LDLT_ORDER_AMD;
+    printf("LDLT ordering: AMD\n");
 #else
     opt.ordering = LDLT_ORDER_NATURAL;
+    printf("LDLT ordering: natural (no reordering)\n");
 #endif
     opt.require_pd = 1;
     opt.pivot = LDLT_PIVOT_NONE;
@@ -229,8 +267,11 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
     }
     t_step = step_done("analyze (SPD ordering/symbolic)", t_step);
 
+    int saved_blas_threads;
+    blas_set_single_threaded(&saved_blas_threads);
     ldlt_numeric *Num = NULL;
     st = ldlt_factorize(S, Ap, Ai, Ax, &opt, &Num);
+    blas_restore_threads(saved_blas_threads);
     free(Ap);
     free(Ai);
     free(Ax);
@@ -244,9 +285,10 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
 
     s_last_neg_count = 0;
     printf("LDLT SPD D diagonal -- positive=%d  negative=0  (n=%d)\n", N, N);
-    printf("LDLT stats -- supernodes=%d  lnz=%lld  levels=%d  max_level_width=%d\n",
-           (int)ldlt_nsuper(S), (long long)ldlt_lnz(S),
-           (int)ldlt_nlevels(S), (int)ldlt_max_level_width(S));
+    printf("LDLT stats -- supernodes=%d  lnz=%lld  levels=%d  "
+           "max_level_width=%d\n",
+           (int)ldlt_nsuper(S), (long long)ldlt_lnz(S), (int)ldlt_nlevels(S),
+           (int)ldlt_max_level_width(S));
     printf("LDLT factorization total elapsed  %8.3f s\n", now_sec() - t0);
     fflush(stdout);
 
@@ -265,7 +307,8 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
     ldlt_factors_t *facs = (ldlt_factors_t *)*f_factors;
     int n_rhs = (*nrhs > 0) ? *nrhs : 1;
     int leading_dim = (*ldb > 0) ? *ldb : ldlt_n(facs->S);
-    ldlt_status st = ldlt_solve(facs->N, (int32_t)n_rhs, b, (int32_t)leading_dim);
+    ldlt_status st =
+        ldlt_solve(facs->N, (int32_t)n_rhs, b, (int32_t)leading_dim);
     if (st != LDLT_OK) {
       fprintf(stderr, "LDLT: solve failed: %s\n", ldlt_status_str(st));
       *info = -1;

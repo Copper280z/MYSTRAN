@@ -1552,8 +1552,8 @@ ldlt_status ldlt_factorize(const ldlt_symbolic *S,
     uint64_t lbytes = (uint64_t)Lsz * (uint64_t)sizeof(double);
     if (avail > 0 && (long double)lbytes > (long double)avail * 0.90L) {
         fprintf(stderr,
-                "ldlt: warning: numeric factor storage requires %.2f GB, available %.2f GB"
-                " -- performance may suffer due to swapping.\n",
+                "ldlt: numeric factor storage requires %.2f GB, available %.2f GB"
+                " -- attempting anyway.\n",
                 (double)lbytes / 1073741824.0,
                 (double)avail / 1073741824.0);
     }

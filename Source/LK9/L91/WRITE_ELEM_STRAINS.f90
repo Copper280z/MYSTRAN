@@ -538,7 +538,8 @@
 	
 	                  WRITE(F06,*)
 	                  IF (DABS(POLY_FIT_ERR(I+L)) >= 0.01D0) THEN
-	                     WRITE(F06,1405) FILL(1: 0), GID_OUT_ARRAY(I,L+1),(OGEL(K,J),J=1,10), POLY_FIT_ERR(I+L), POLY_FIT_ERR_INDEX(I+L)
+	                     WRITE(F06,1405) FILL(1: 0), GID_OUT_ARRAY(I,L+1),(OGEL(K,J),J=1,10), &
+                         POLY_FIT_ERR(I+L), POLY_FIT_ERR_INDEX(I+L)
 	                     WRT_ERR_INDEX_NOTE(POLY_FIT_ERR_INDEX(I+L)) = 'Y'
 	                  ELSE
 	                     WRITE(F06,1406) FILL(1: 0), GID_OUT_ARRAY(I,L+1),(OGEL(K,J),J=1,10), POLY_FIT_ERR(I+L)

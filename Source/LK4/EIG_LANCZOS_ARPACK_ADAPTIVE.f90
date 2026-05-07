@@ -282,10 +282,10 @@
       IF (SOLLIB(1:6) == 'SPARSE') THEN
          SLU_INFO = 0
          IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
-            CALL SYM_MAT_DECOMP_QDLDL ( SUBR_NAME, 'KMSM', 'L ',                                                                    &
+            CALL SYM_MAT_DECOMP_QDLDL ( SUBR_NAME, 'KMSM', 'L ',                                                                 &
                                         NDOFL, NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn, SLU_INFO )
          ELSE
-            CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KMSM', 'L ',                                                                   &
+            CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'KMSM', 'L ',                                                                &
                                          NDOFL, NTERM_KMSMn, I_KMSMn, J_KMSMn, KMSMn, SLU_INFO )
          ENDIF
          IF (SLU_INFO /= 0) THEN
@@ -844,8 +844,8 @@
 
  9892 FORMAT('               THIS IS FOR ROW AND COL IN THE MATRIX FOR GRID POINT ',I8,' COMPONENT ',I3)
 
- 1050 FORMAT(' *INFORMATION: QDLDL D-MATRIX INERTIA: ',I8,' eigenvalue(s) below sigma.',                                              &
-             /,'               Frequency range: [',F12.4,' Hz, ',F12.4,' Hz]',                                                        &
+ 1050 FORMAT(' *INFORMATION: QDLDL D-MATRIX INERTIA: ',I8,' eigenvalue(s) below sigma.',                                           &
+             /,'               Frequency range: [',F12.4,' Hz, ',F12.4,' Hz]',                                                     &
              /,'               (eigenvalue count from D diagonal, by Sylvester law of inertia)')
 
  1051 FORMAT(' *INFORMATION: ARPACK found ',I8,' eigenvalue(s) in the frequency range.')

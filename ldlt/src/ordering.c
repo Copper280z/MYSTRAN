@@ -72,13 +72,14 @@ static int metis_memory_preflight(int32_t n, int32_t graph_nnz) {
         return 1;
 
     fprintf(stderr,
-            "ldlt: METIS ordering memory guard: estimated %.2Lf GB exceeds "
-            "available %.2f GB (n=%d, graph_nnz=%d, factor=%.1f). "
+            "ldlt: warning: METIS ordering memory guard: estimated %.2Lf GB exceeds "
+            "available %.2f GB (n=%d, graph_nnz=%d, factor=%.1f) -- "
+            "performance may suffer due to swapping. "
             "Set LDLT_METIS_MEMORY_FACTOR=0 to disable this guard.\n",
             need / 1073741824.0L,
             (double)avail / 1073741824.0,
             (int)n, (int)graph_nnz, factor);
-    return 0;
+    return 1;
 }
 #endif
 
@@ -136,10 +137,7 @@ static ldlt_status order_metis(int32_t n, const int32_t *Ap, const int32_t *Ai, 
         }
         Fp[i+1] = (int32_t)prefix;
     }
-    if (!metis_memory_preflight(n, Fp[n])) {
-        free(Fp);
-        return LDLT_ERR_NOMEM;
-    }
+    metis_memory_preflight(n, Fp[n]);
 
     int32_t *Fi = (int32_t*)malloc((size_t)(Fp[n] > 0 ? Fp[n] : 1) * sizeof(int32_t));
     int32_t *cur = (int32_t*)malloc((size_t)(n > 0 ? n : 1) * sizeof(int32_t));

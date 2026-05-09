@@ -128,6 +128,10 @@ void c_fortran_qdldl_(int *iopt, int *n, int *nnz, int *nrhs, double *values,
     double t_step;
 
     printf("LDLT SPD factorization begin  (n=%d, nnz=%d)\n", N, NNZ);
+#if !LDLT_USE_SYSTEM_BLAS
+    printf("LDLT WARNING: built without a system CBLAS; using reference (slow) BLAS.\n"
+           "LDLT          Install libopenblas-dev (or equivalent) and reconfigure.\n");
+#endif
     fflush(stdout);
 
     if (N < 0 || NNZ < 0) {

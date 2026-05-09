@@ -1552,13 +1552,10 @@ ldlt_status ldlt_factorize(const ldlt_symbolic *S,
     uint64_t lbytes = (uint64_t)Lsz * (uint64_t)sizeof(double);
     if (avail > 0 && (long double)lbytes > (long double)avail * 0.90L) {
         fprintf(stderr,
-                "ldlt: numeric factor storage requires %.2f GB, available %.2f GB.\n",
+                "ldlt: warning: numeric factor storage requires %.2f GB, available %.2f GB"
+                " -- performance may suffer due to swapping.\n",
                 (double)lbytes / 1073741824.0,
                 (double)avail / 1073741824.0);
-        free(Bp); free(Bi); free(Bx);
-        ldlt_free_numeric(N);
-        ldlt_pop_error_trap(&trap);
-        return LDLT_ERR_NOMEM;
     }
     N->L = (double*)ldlt_xcalloc((size_t)Lsz, sizeof(double));
     N->D = (double*)ldlt_xcalloc((size_t)(S->n>0?S->n:1), sizeof(double));

@@ -9,6 +9,27 @@ include(CheckFunctionExists)
 project(Mystran)
 enable_language(Fortran)
 
+# Apply native-arch tuning to all targets (including subprojects) for Release builds.
+# This is what actually enables SIMD auto-vectorization — without it the compiler
+# can only emit generic baseline instructions even at -O3.
+# AArch64 GCC uses -mcpu=native (covers both -march and -mtune); x86 uses -march=native.
+# if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64|AARCH64")
+#   add_compile_options("$<$<CONFIG:Release>:-mcpu=native>")
+# else()
+#   add_compile_options("$<$<CONFIG:Release>:-march=native;-mtune=native>")
+# endif()
+
+# Link-time optimization for Release: allows inlining and DCE across translation
+# units, which matters for the many small Fortran subroutines called from hot paths.
+include(CheckIPOSupported)
+check_ipo_supported(RESULT _ipo_supported OUTPUT _ipo_output LANGUAGES C Fortran)
+if(_ipo_supported)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+  message(STATUS "LTO enabled for Release builds")
+else()
+  message(STATUS "LTO not supported: ${_ipo_output}")
+endif()
+
 if(WIN32)
   enable_language(RC)
 endif()
@@ -137,6 +158,23 @@ if(TPL_ENABLE_METISLIB)
   endforeach()
 
   message(STATUS "METIS patched.")
+
+  set(GKLIB_PATCHES_DIR "${PROJECT_SOURCE_DIR}/metis/gklib_patches")
+  message(STATUS "Applying patches to GKlib...")
+  file(GLOB_RECURSE GKLIB_PATCH_FILES RELATIVE "${GKLIB_PATCHES_DIR}" "${GKLIB_PATCHES_DIR}/*")
+
+  foreach(file IN LISTS GKLIB_PATCH_FILES)
+    set(src "${GKLIB_PATCHES_DIR}/${file}")
+    set(dst "${GKLIB_DIR}/${file}")
+
+    get_filename_component(dst_dir "${dst}" DIRECTORY)
+    file(MAKE_DIRECTORY "${dst_dir}")
+
+    message(STATUS "  Patching: ${file}")
+    file(COPY "${src}" DESTINATION "${dst_dir}")
+  endforeach()
+
+  message(STATUS "GKlib patched.")
 
   set(SHARED OFF CACHE BOOL "Build vendored GKlib/METIS as static libraries" FORCE)
   set(GKLIB_BUILD_APPS OFF CACHE BOOL "Build GKlib applications" FORCE)
@@ -933,6 +971,13 @@ if(CMAKE_COMPILER_IS_GNUCC)
   set(CMAKE_CXX_FLAGS_DETERMINISTIC
     "${CMAKE_C_FLAGS_DETERMINISTIC}"
   )
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64|AARCH64")
+    set(CMAKE_C_FLAGS_RELEASE       "-O3 -mcpu=native -DNDEBUG")
+    set(CMAKE_Fortran_FLAGS_RELEASE "-O3 -mcpu=native")
+  else()
+    set(CMAKE_C_FLAGS_RELEASE       "-O3 -march=native -mtune=native -DNDEBUG")
+    set(CMAKE_Fortran_FLAGS_RELEASE "-O3 -march=native -mtune=native")
+  endif()
   set(CMAKE_PROFILING_FLAGS "-O2 -g -fno-inline -fno-omit-frame-pointer -fno-inline-functions")
   set(CMAKE_C_FLAGS_PROFILING "${CMAKE_PROFILING_FLAGS}")
   set(CMAKE_CXX_FLAGS_PROFILING "${CMAKE_PROFILING_FLAGS}")

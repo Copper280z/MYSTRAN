@@ -6,7 +6,32 @@ gmon.out
 
 # CMake output directories:
 Binaries/*
-
+build/*
+*.md
+.DS_Store
+.fortls
+*.ERR
+*.F06
+*.mtx
+*.OP2
+*.L1B
+*.L1C
+*.L1D
+*.L1E
+*.L1H
+*.L1K
+*.L1L
+*.L1R
+*.L2B
+*.L2D
+*.L2H
+*.L2G
+*.NEU
+qdldl/__git/*
+test/*
+.venv/
+.venv/*
+.venv/**
 # downloaded f2c sources
 f2c
 

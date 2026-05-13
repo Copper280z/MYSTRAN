@@ -41,7 +41,7 @@ typedef struct {
     int32_t first_col;     /* global col index of first col in supernode */
     int32_t width;         /* k: number of cols */
     int32_t nrows_below;   /* m: rows strictly below the diagonal block */
-    int32_t row_off;       /* offset into rows_pool of length nrows_below */
+    int64_t row_off;       /* offset into rows_pool of length nrows_below */
     int32_t *sn_perm;      /* reserved for local supernode permutations */
 } ldlt_super;
 

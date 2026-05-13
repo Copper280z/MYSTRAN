@@ -44,8 +44,8 @@
       USE MODEL_STUF, ONLY            :  AGRID, ANY_STRN_OUTPUT, EDAT, EPNT, ETYPE, EID, ELGP, ELMTYP, ELOUT,                      &
                                          METYPE, NUM_SEi, NUM_EMG_FATAL_ERRS, PCOMP_PROPS, PLY_NUM, STRAIN, TYPE, SHELL_STR_ANGLE
       USE CC_OUTPUT_DESCRIBERS, ONLY  :  STRN_LOC, STRN_OPT
-      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX,              &
-                                         STRN_OUT_CACHE, STRN_OUT_CACHE_ERR, STRN_OUT_CACHE_ERR_INDEX, STRN_OUT_CACHE_ROWS,         &
+      USE LINK9_STUFF, ONLY           :  EID_OUT_ARRAY, GID_OUT_ARRAY, MAXREQ, OGEL, POLY_FIT_ERR, POLY_FIT_ERR_INDEX,             &
+                                         STRN_OUT_CACHE, STRN_OUT_CACHE_ERR, STRN_OUT_CACHE_ERR_INDEX, STRN_OUT_CACHE_ROWS,        &
                                          STRN_OUT_CACHE_VALID
       USE OUTPUT4_MATRICES, ONLY      :  OTM_STRN, TXT_STRN
 
@@ -207,11 +207,11 @@ elems_7: DO J = 1,NELE
 
                      STRAIN_OUT(:,1) = STRAIN(:)              ! Set STRAIN_OUT for NUM_PTS(I) = 1
 
-                     IF ((STRN_LOC == 'CORNER  ') .OR.                                                                                &
-                         (STRN_LOC == 'GAUSS   ') .OR.                                                                                &
-                         (TYPE(1:4) == 'HEXA') .OR.                                                                                   &
-                         (TYPE(1:5) == 'PENTA') .OR.                                                                                  &
-                         (TYPE(1:5) == 'TETRA') .OR.                                                                                  &
+                     IF ((STRN_LOC == 'CORNER  ') .OR.                                                                             &
+                         (STRN_LOC == 'GAUSS   ') .OR.                                                                             &
+                         (TYPE(1:4) == 'HEXA') .OR.                                                                                &
+                         (TYPE(1:5) == 'PENTA') .OR.                                                                               &
+                         (TYPE(1:5) == 'TETRA') .OR.                                                                               &
                          (TYPE(1:5) == 'QUAD8')) THEN
 
                         IF (TYPE(1:5) == 'QUAD4') THEN

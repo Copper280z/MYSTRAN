@@ -272,10 +272,26 @@ endif()
 # Experimental sparse LDL^T solver (drop-in replacement for QDLDL)
 set(LDLT_DIR "${PROJECT_SOURCE_DIR}/ldlt")
 # Point ldlt at SuiteSparse AMD and MYSTRAN's vendored METIS before configuring.
-set(LDLT_AMD_INCLUDE_DIR "/usr/include/suitesparse"
-    CACHE PATH "AMD include directory for ldlt" FORCE)
-set(LDLT_AMD_LIBRARY "/usr/lib/x86_64-linux-gnu/libamd.so"
-    CACHE FILEPATH "AMD library for ldlt" FORCE)
+# Detect AMD from SuiteSparse; on macOS check Homebrew prefix automatically.
+if(APPLE)
+  execute_process(COMMAND brew --prefix OUTPUT_VARIABLE _brew_prefix OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  find_path(_amd_inc NAMES amd.h
+    HINTS "${_brew_prefix}/include" "${_brew_prefix}/include/suitesparse"
+    PATH_SUFFIXES suitesparse NO_DEFAULT_PATH)
+  find_library(_amd_lib NAMES amd
+    HINTS "${_brew_prefix}/lib" NO_DEFAULT_PATH)
+else()
+  find_path(_amd_inc NAMES amd.h PATH_SUFFIXES suitesparse)
+  find_library(_amd_lib NAMES amd)
+endif()
+if(_amd_inc AND _amd_lib)
+  set(LDLT_AMD_INCLUDE_DIR "${_amd_inc}" CACHE PATH "AMD include directory for ldlt" FORCE)
+  set(LDLT_AMD_LIBRARY "${_amd_lib}" CACHE FILEPATH "AMD library for ldlt" FORCE)
+else()
+  unset(LDLT_AMD_INCLUDE_DIR CACHE)
+  unset(LDLT_AMD_LIBRARY CACHE)
+  message(STATUS "SuiteSparse AMD not found; ldlt will use internal ordering")
+endif()
 if(TPL_ENABLE_METISLIB)
   set(LDLT_METIS_INCLUDE_DIR "${CMAKE_BINARY_DIR}/metis/METIS/include"
       CACHE PATH "METIS include directory for ldlt" FORCE)

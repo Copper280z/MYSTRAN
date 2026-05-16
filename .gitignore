@@ -27,6 +27,12 @@ build/*
 *.L2H
 *.L2G
 *.NEU
+*.OU1
+*.BUG
+*.zip
+*.pyc
+*.png
+
 qdldl/__git/*
 test/*
 .venv/

@@ -174,6 +174,8 @@ sol_do:  DO
          ENDDO sol_do
       ENDIF
 
+      CALL KLL_ENFORCE_SYMMETRY ( SUBR_NAME, NDOFL, NTERM_KLL, I_KLL, J_KLL, KLL )
+
 Factr:IF (SOLLIB == 'BANDED  ') THEN                       ! Use LAPACK
 
          INFO = 0
@@ -483,6 +485,181 @@ FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the stor
 
 
 
+      SUBROUTINE KLL_ENFORCE_SYMMETRY ( CALLING_SUBR, NROWS, NTERMS, I_MAT, J_MAT, MAT )
 
+! Checks that KLL is stored as a symmetric CRS matrix, then explicitly enforces that symmetry by averaging matching
+! off-diagonal terms. Any missing counterpart or counterpart value that differs beyond roundoff tolerance is treated as a
+! programming error.
 
+      USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
+      USE IOUNT1, ONLY                :  ERR, F06, SC1
+      USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR
+      USE CONSTANTS_1, ONLY           :  ONE, TWO, ONE_HUNDRED
+      USE MACHINE_PARAMS, ONLY        :  MACH_EPS
 
+      IMPLICIT NONE
+
+      CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'KLL_ENFORCE_SYMMETRY'
+      CHARACTER(LEN=*), INTENT(IN)    :: CALLING_SUBR
+
+      INTEGER(LONG), INTENT(IN)       :: NROWS
+      INTEGER(LONG), INTENT(IN)       :: NTERMS
+      INTEGER(LONG), INTENT(IN)       :: I_MAT(NROWS+1)
+      INTEGER(LONG), INTENT(IN)       :: J_MAT(NTERMS)
+
+      REAL(DOUBLE),  INTENT(INOUT)    :: MAT(NTERMS)
+
+      INTEGER(LONG)                   :: FIRST_MISSING_COL = 0
+      INTEGER(LONG)                   :: FIRST_MISSING_ROW = 0
+      INTEGER(LONG)                   :: FIRST_MISSING_TERM = 0
+      INTEGER(LONG)                   :: I
+      INTEGER(LONG)                   :: J
+      INTEGER(LONG)                   :: K
+      INTEGER(LONG)                   :: KSYM
+      INTEGER(LONG)                   :: NUM_ASYM = 0
+      INTEGER(LONG)                   :: NUM_MISSING = 0
+      INTEGER(LONG)                   :: WORST_COL = 0
+      INTEGER(LONG)                   :: WORST_ROW = 0
+      INTEGER(LONG)                   :: WORST_TERM = 0
+      INTEGER(LONG)                   :: WORST_TERM_SYM = 0
+
+      REAL(DOUBLE)                    :: AVG
+      REAL(DOUBLE)                    :: DIFF
+      REAL(DOUBLE)                    :: MAX_ABS_DIFF = 0.0D0
+      REAL(DOUBLE)                    :: PAIR_SCALE
+      REAL(DOUBLE)                    :: PAIR_TOL
+      REAL(DOUBLE), PARAMETER         :: SYM_TOL_FACTOR = ONE_HUNDRED
+      REAL(DOUBLE)                    :: WORST_VAL = 0.0D0
+      REAL(DOUBLE)                    :: WORST_VAL_SYM = 0.0D0
+      REAL(DOUBLE)                    :: WORST_TOL = 0.0D0
+
+      INTRINSIC                       :: DABS
+      INTRINSIC                       :: MAX
+
+      DO I=1,NROWS
+         DO K=I_MAT(I),I_MAT(I+1)-1
+            J = J_MAT(K)
+
+            IF ((J < 1) .OR. (J > NROWS)) THEN
+               FATAL_ERR = FATAL_ERR + 1
+               WRITE(SC1,9901) SUBR_NAME, CALLING_SUBR, I, J, K
+               WRITE(ERR,9901) SUBR_NAME, CALLING_SUBR, I, J, K
+               WRITE(F06,9901) SUBR_NAME, CALLING_SUBR, I, J, K
+               CALL OUTA_HERE ( 'Y' )
+            ENDIF
+
+            IF (I == J) CYCLE
+
+            KSYM = 0
+            CALL FIND_CRS_TERM ( NROWS, NTERMS, I_MAT, J_MAT, J, I, KSYM )
+
+            IF (KSYM == 0) THEN
+               NUM_MISSING = NUM_MISSING + 1
+               IF (NUM_MISSING == 1) THEN
+                  FIRST_MISSING_ROW  = I
+                  FIRST_MISSING_COL  = J
+                  FIRST_MISSING_TERM = K
+               ENDIF
+               CYCLE
+            ENDIF
+
+            IF (I < J) THEN
+               DIFF       = DABS(MAT(K) - MAT(KSYM))
+               PAIR_SCALE = MAX(ONE, DABS(MAT(K)), DABS(MAT(KSYM)))
+               PAIR_TOL   = SYM_TOL_FACTOR*MACH_EPS*PAIR_SCALE
+               IF (DIFF > PAIR_TOL) THEN
+                  NUM_ASYM = NUM_ASYM + 1
+                  IF ((NUM_ASYM == 1) .OR. (DIFF > MAX_ABS_DIFF)) THEN
+                     MAX_ABS_DIFF   = DIFF
+                     WORST_ROW      = I
+                     WORST_COL      = J
+                     WORST_TERM     = K
+                     WORST_TERM_SYM = KSYM
+                     WORST_VAL      = MAT(K)
+                     WORST_VAL_SYM  = MAT(KSYM)
+                     WORST_TOL      = PAIR_TOL
+                  ENDIF
+               ENDIF
+            ENDIF
+         ENDDO
+      ENDDO
+
+      IF ((NUM_MISSING > 0) .OR. (NUM_ASYM > 0)) THEN
+         FATAL_ERR = FATAL_ERR + 1
+         WRITE(SC1,9902) SUBR_NAME, CALLING_SUBR
+         WRITE(ERR,9902) SUBR_NAME, CALLING_SUBR
+         WRITE(F06,9902) SUBR_NAME, CALLING_SUBR
+
+         IF (NUM_MISSING > 0) THEN
+            WRITE(SC1,9903) NUM_MISSING, FIRST_MISSING_ROW, FIRST_MISSING_COL, FIRST_MISSING_TERM
+            WRITE(ERR,9903) NUM_MISSING, FIRST_MISSING_ROW, FIRST_MISSING_COL, FIRST_MISSING_TERM
+            WRITE(F06,9903) NUM_MISSING, FIRST_MISSING_ROW, FIRST_MISSING_COL, FIRST_MISSING_TERM
+         ENDIF
+
+         IF (NUM_ASYM > 0) THEN
+            WRITE(SC1,9904) NUM_ASYM, SYM_TOL_FACTOR, MACH_EPS, WORST_ROW, WORST_COL, WORST_VAL, WORST_TERM, WORST_VAL_SYM,        &
+                             WORST_TERM_SYM, MAX_ABS_DIFF, WORST_TOL
+            WRITE(ERR,9904) NUM_ASYM, SYM_TOL_FACTOR, MACH_EPS, WORST_ROW, WORST_COL, WORST_VAL, WORST_TERM, WORST_VAL_SYM,        &
+                             WORST_TERM_SYM, MAX_ABS_DIFF, WORST_TOL
+            WRITE(F06,9904) NUM_ASYM, SYM_TOL_FACTOR, MACH_EPS, WORST_ROW, WORST_COL, WORST_VAL, WORST_TERM, WORST_VAL_SYM,        &
+                             WORST_TERM_SYM, MAX_ABS_DIFF, WORST_TOL
+         ENDIF
+
+         CALL OUTA_HERE ( 'Y' )
+      ENDIF
+
+      DO I=1,NROWS
+         DO K=I_MAT(I),I_MAT(I+1)-1
+            J = J_MAT(K)
+            IF (I < J) THEN
+               CALL FIND_CRS_TERM ( NROWS, NTERMS, I_MAT, J_MAT, J, I, KSYM )
+               AVG = (MAT(K) + MAT(KSYM))/TWO
+               MAT(K)    = AVG
+               MAT(KSYM) = AVG
+            ENDIF
+         ENDDO
+      ENDDO
+
+      RETURN
+
+ 9901 FORMAT(' *ERROR  9901: PROGRAMMING ERROR IN SUBROUTINE ',A,' CALLED BY SUBROUTINE ',A                                      &
+                    ,/,14X,' MATRIX KLL HAS AN INVALID COLUMN INDEX. ROW = ',I8,', COLUMN = ',I8,', TERM = ',I12)
+
+ 9902 FORMAT(' *ERROR  9902: PROGRAMMING ERROR IN SUBROUTINE ',A,' CALLED BY SUBROUTINE ',A                                      &
+                    ,/,14X,' MATRIX KLL MUST BE SYMMETRIC BEFORE SOLVER SELECTION.')
+
+ 9903 FORMAT(14X,' KLL HAS ',I12,' STORED OFF-DIAGONAL TERM(S) WITHOUT A STORED SYMMETRIC COUNTERPART.'                          &
+                    ,/,14X,' FIRST MISSING COUNTERPART IS FOR KLL(',I8,',',I8,') AT TERM ',I12)
+
+ 9904 FORMAT(14X,' KLL HAS ',I12,' STORED OFF-DIAGONAL PAIR(S) THAT DIFFER BY MORE THAN ',1ES13.6,'*MACH_EPS.'                   &
+                    ,/,14X,' MACH_EPS = ',1ES13.6                                                                                 &
+                    ,/,14X,' WORST PAIR: KLL(',I8,',',I8,') = ',1ES23.16,' AT TERM ',I12                                         &
+                    ,/,14X,'             KLL TRANSPOSE TERM = ',1ES23.16,' AT TERM ',I12                                         &
+                    ,/,14X,'             MAX ABS DIFFERENCE = ',1ES23.16                                                          &
+                    ,/,14X,'             TOLERANCE          = ',1ES23.16)
+
+      CONTAINS
+
+         SUBROUTINE FIND_CRS_TERM ( NROWS_IN, NTERMS_IN, I_IN, J_IN, ROW, COL, TERM )
+
+            INTEGER(LONG), INTENT(IN)  :: NROWS_IN
+            INTEGER(LONG), INTENT(IN)  :: NTERMS_IN
+            INTEGER(LONG), INTENT(IN)  :: I_IN(NROWS_IN+1)
+            INTEGER(LONG), INTENT(IN)  :: J_IN(NTERMS_IN)
+            INTEGER(LONG), INTENT(IN)  :: ROW
+            INTEGER(LONG), INTENT(IN)  :: COL
+            INTEGER(LONG), INTENT(OUT) :: TERM
+
+            INTEGER(LONG)              :: KK
+
+            TERM = 0
+            DO KK=I_IN(ROW),I_IN(ROW+1)-1
+               IF (J_IN(KK) == COL) THEN
+                  TERM = KK
+                  EXIT
+               ENDIF
+            ENDDO
+
+         END SUBROUTINE FIND_CRS_TERM
+
+      END SUBROUTINE KLL_ENFORCE_SYMMETRY

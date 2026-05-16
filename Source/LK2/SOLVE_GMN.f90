@@ -33,7 +33,7 @@
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06, SCR, L2A, LINK2A, L2A_MSG, SC1
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, NDOFG, NDOFM, NTERM_RMG, NTERM_RMN, NTERM_RMM, NTERM_GMN
-      USE PARAMS, ONLY                :  EPSIL, PRTRMG, PRTGMN, SOLLIB, SPARSE_FLAVOR, SUPINFO
+      USE PARAMS, ONLY                :  EPSIL, PRTRMG, PRTGMN, SOLLIB, SUPINFO
       USE TIMDAT, ONLY                :  TSEC
       USE CONSTANTS_1, ONLY           :  ONE
       USE SPARSE_MATRICES, ONLY       :  I_RMG, J_RMG, RMG, I_RMN, J_RMN, RMN, I_RMM, J_RMM, RMM, I_GMN, J_GMN, GMN
@@ -270,14 +270,14 @@
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
       USE IOUNT1, ONLY                :  FILE_NAM_MAXLEN, WRT_ERR, ERR, F06
       USE SCONTR, ONLY                :  NDOFG, NDOFM, NDOFN, NTERM_GMN, NTERM_RMM, NTERM_RMN, BLNK_SUB_NAM
-      USE PARAMS, ONLY                :  EPSIL, SOLLIB, SPARSE_FLAVOR
+      USE PARAMS, ONLY                :  EPSIL, SOLLIB
       USE TIMDAT, ONLY                :  HOUR, MINUTE, SEC, SFRAC, TSEC
       USE SPARSE_MATRICES, ONLY       :  I_RMN, J_RMN, RMN, I_RMM, J_RMM, RMM, I2_GMN, I_GMN, J_GMN, GMN
       USE SCRATCH_MATRICES, ONLY      :  I_CCS1, J_CCS1, CCS1
       USE FULL_MATRICES, ONLY         :  RMM_FULL
       USE SuperLU_STUF, ONLY          :  SLU_FACTORS, SLU_INFO
-      USE SYM_MAT_DECOMP_QDLDL_Interface
-      USE FBS_QDLDL_Interface
+      USE SYM_MAT_DECOMP_SUPRLU_Interface
+      USE FBS_SUPRLU_Interface
 
 ! Interface module not needed for subr's DGETRF and DGETRS. These are "CONTAIN'ed" in module LAPACK_LIN_EQN_DPB, which
 ! is "USE'd" above
@@ -362,26 +362,10 @@
 
       ELSE IF (SOLLIB == 'SPARSE  ') THEN
 
-         IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
-
-            SLU_INFO = 0
-            CALL ALLOCATE_SCR_CCS_MAT ( 'CCS1', NDOFM, NTERM_RMM, SUBR_NAME )
-            CALL SPARSE_CRS_SPARSE_CCS ( NDOFM, NDOFM, NTERM_RMM, 'RMM', I_RMM, J_RMM, RMM, 'CCS1', J_CCS1, I_CCS1, CCS1, 'Y')
-            CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, SLU_INFO )
-
-         ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
-
-            SLU_INFO = 0
-            CALL SYM_MAT_DECOMP_QDLDL ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, I_RMM, J_RMM, RMM, SLU_INFO )
-
-         ELSE
-
-            FATAL_ERR = FATAL_ERR + 1
-            WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-            WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-            CALL OUTA_HERE ( 'Y' )
-
-         ENDIF
+         SLU_INFO = 0
+         CALL ALLOCATE_SCR_CCS_MAT ( 'CCS1', NDOFM, NTERM_RMM, SUBR_NAME )
+         CALL SPARSE_CRS_SPARSE_CCS ( NDOFM, NDOFM, NTERM_RMM, 'RMM', I_RMM, J_RMM, RMM, 'CCS1', J_CCS1, I_CCS1, CCS1, 'Y')
+         CALL SYM_MAT_DECOMP_SUPRLU ( SUBR_NAME, 'RMM', 'M ', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, SLU_INFO )
 
       ELSE
 
@@ -453,24 +437,9 @@
                ENDIF
 
             ELSE IF (SOLLIB == 'SPARSE  ') THEN
-               IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
 
-                  SLU_INFO = 0
-                  CALL FBS_SUPRLU ( SUBR_NAME, 'RMM', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, J, RMN_COL, SLU_INFO )
-
-               ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
-
-                  SLU_INFO = 0
-                  CALL FBS_QDLDL ( SUBR_NAME, 'RMM', NDOFM, NTERM_RMM, I_RMM, J_RMM, RMM, J, RMN_COL, SLU_INFO )
-
-               ELSE
-
-                  FATAL_ERR = FATAL_ERR + 1
-                  WRITE(ERR,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-                  WRITE(F06,9991) SUBR_NAME, 'SPARSE_FLAVOR'
-                  CALL OUTA_HERE ( 'Y' )
-
-               ENDIF
+               SLU_INFO = 0
+               CALL FBS_SUPRLU ( SUBR_NAME, 'RMM', NDOFM, NTERM_RMM, J_CCS1, I_CCS1, CCS1, J, RMN_COL, SLU_INFO )
 
             ELSE
 
@@ -500,36 +469,18 @@
       CALL DEALLOCATE_SCR_MAT ( 'CCS1' )
       CALL DEALLOCATE_FULL_MAT ( 'RMM_FULL' )
 
-FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the storage allocated inside sparse solver
+FreeS:IF (SOLLIB == 'SPARSE  ') THEN                       ! Last, free the storage allocated inside SuperLU
 
-         IF (SPARSE_FLAVOR(1:7) == 'SUPERLU') THEN
+         DO J=1,NDOFM                                         ! Need a null col of loads when SuperLU is called to free storage
+            DUM_COL(J) = ZERO                                  ! (only because it appears in the calling list)
+         ENDDO
 
-            DO J=1,NDOFM                                         ! Need a null col of loads when SuperLU is called to factor KLL
-               DUM_COL(J) = ZERO                                  ! (only because it appears in the calling list)
-            ENDDO
+         CALL C_FORTRAN_DGSSV( 3, NDOFM, NTERM_RMM, 1, RMM, I_RMM, J_RMM, DUM_COL, NDOFM, SLU_FACTORS, SLU_INFO )
 
-            CALL C_FORTRAN_DGSSV( 3, NDOFM, NTERM_RMM, 1, RMM, I_RMM, J_RMM, DUM_COL, NDOFM, SLU_FACTORS, SLU_INFO )
-
-            IF (SLU_INFO .EQ. 0) THEN
-               WRITE (*,*) 'SUPERLU STORAGE FREED'
-            ELSE
-               WRITE(*,*) 'SUPERLU STORAGE NOT FREED. INFO FROM SUPERLU FREE STORAGE ROUTINE = ', SLU_INFO
-            ENDIF
-
-         ELSE IF (SPARSE_FLAVOR(1:5) == 'QDLDL') THEN
-
-            DO J=1,NDOFM
-               DUM_COL(J) = ZERO
-            ENDDO
-
-            CALL C_FORTRAN_QDLDL( 3, NDOFM, NTERM_RMM, 1, RMM, I_RMM, J_RMM, DUM_COL, NDOFM, SLU_FACTORS, SLU_INFO )
-
-            IF (SLU_INFO .EQ. 0) THEN
-               WRITE (*,*) 'QDLDL STORAGE FREED'
-            ELSE
-               WRITE(*,*) 'QDLDL STORAGE NOT FREED. INFO FROM QDLDL FREE STORAGE ROUTINE = ', SLU_INFO
-            ENDIF
-
+         IF (SLU_INFO .EQ. 0) THEN
+            WRITE (*,*) 'SUPERLU STORAGE FREED'
+         ELSE
+            WRITE(*,*) 'SUPERLU STORAGE NOT FREED. INFO FROM SUPERLU FREE STORAGE ROUTINE = ', SLU_INFO
          ENDIF
 
       ENDIF FreeS

@@ -35,7 +35,7 @@
       SAVE
 
       CHARACTER(256*BYTE)            :: MYSTRAN_COMMENT  = '*** Please report any problems to mystransolver@gmail.com ***'
-      CHARACTER(  8*BYTE), PARAMETER :: MYSTRAN_VER_NUM  = '18.0.0'
+      CHARACTER(  8*BYTE), PARAMETER :: MYSTRAN_VER_NUM  = '18_ldlt'
       CHARACTER(  3*BYTE), PARAMETER :: MYSTRAN_VER_MONTH= 'APR'
       CHARACTER(  2*BYTE), PARAMETER :: MYSTRAN_VER_DAY  = '20'
       CHARACTER(  4*BYTE), PARAMETER :: MYSTRAN_VER_YEAR = '2026'

@@ -41,7 +41,7 @@
       USE IOUNT1, ONLY                :  WRT_ERR, ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MAX_ORDER_GAUSS, MELDOF, MPLOAD4_3D_DATA, NPLOAD4_3D, NSUB, NTSUB
       USE TIMDAT, ONLY                :  TSEC
-      USE CONSTANTS_1, ONLY           :  QUARTER, HALF, ZERO, ONE
+      USE CONSTANTS_1, ONLY           :  QUARTER, HALF, ZERO, ONE, TWO
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE PARAMS, ONLY                :  EPSIL
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
@@ -66,6 +66,7 @@
 
       INTEGER(LONG), INTENT(IN)       :: INT_ELEM_ID             ! Internal element ID
       INTEGER(LONG), INTENT(IN)       :: IORD                   ! Gaussian integration order for element
+      INTEGER(LONG), PARAMETER        :: EAS_NUM_MODES = 9_LONG  ! Internal incompatible/EAS modes for HEXA8
       INTEGER(LONG)                   :: ELIDA,ELIDI            ! Actual and internal elem ID's read from array PLOAD4_3D_DATA
       INTEGER(LONG)                   :: FACE_COUNT             ! Count of the num of HEXA faces processed for PLOAD4 pressure loads
       INTEGER(LONG)                   :: FACE_NODES(6,4)        ! Array of actual   grid numbers on the 6 faces of the HEXA
@@ -113,6 +114,23 @@
       REAL(DOUBLE)                    :: DUM8(ELGP,ELGP)        ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM9(3,ELGP)           ! Intermediate matrix used in solving for elem matrices
 
+      REAL(DOUBLE)                    :: EAS_G(EAS_NUM_MODES,3*ELGP)
+                                                                ! Coupling matrix for statically condensed CHEXA8 internal modes
+      REAL(DOUBLE)                    :: EAS_H(EAS_NUM_MODES,EAS_NUM_MODES)
+                                                                ! Internal-mode stiffness for CHEXA8 assumed strain
+      REAL(DOUBLE)                    :: EAS_HINV(EAS_NUM_MODES,EAS_NUM_MODES)
+                                                                ! Inverse of EAS_H
+      REAL(DOUBLE)                    :: EAS_HINV_G(EAS_NUM_MODES,3*ELGP)
+                                                                ! EAS_HINV*EAS_G
+      REAL(DOUBLE)                    :: EAS_HINV_Q(EAS_NUM_MODES)
+                                                                ! Thermal load term condensed through EAS_HINV
+      REAL(DOUBLE)                    :: EAS_LOAD(EAS_NUM_MODES)
+                                                                ! Internal-mode thermal load vector
+      REAL(DOUBLE)                    :: EAS_MODE(6,EAS_NUM_MODES,IORD*IORD*IORD)
+                                                                ! Incompatible strain modes at each Gauss point
+      REAL(DOUBLE)                    :: EAS_MODE_PT(6,EAS_NUM_MODES)
+                                                                ! Incompatible strain modes at a recovery point (scratch)
+
       REAL(DOUBLE)                    :: EALP(6)                ! Variable used in calc PTE therm loads & STEi therm stress coeffs
       REAL(DOUBLE)                    :: EPS1                   ! A small number to compare to real zero
       REAL(DOUBLE)                    :: FACE_AREA              ! Area of a face of the HEXA where a PLOAD4 pressure acts
@@ -126,6 +144,11 @@
       REAL(DOUBLE)                    :: JAC(3,3)               ! An output from subr JAC3D, called herein. 3 x 3 Jacobian matrix.
       REAL(DOUBLE)                    :: JACI(3,3)              ! An output from subr JAC3D, called herein. 3 x 3 Jacobian inverse.
       REAL(DOUBLE)                    :: KWW(3,3)               ! Portion of differential stiffness matrix
+
+      LOGICAL                         :: HEXA8_EAS              ! True for CHEXA8 with IORD >= 2 (EAS is active)
+
+      REAL(DOUBLE)                    :: JAC0_INV(3,3)          ! Jacobian inverse at element centroid (Simo & Rifai J0)
+      REAL(DOUBLE)                    :: DETJ0                  ! Determinant of centroid Jacobian
       REAL(DOUBLE)                    :: PSH(ELGP)              ! Output from subr SHP3DH. Shape fcn at Gauss pts SSI, SSJ
       REAL(DOUBLE)                    :: PSIGN                  !
       REAL(DOUBLE)                    :: SIGxx                  ! Normal stress in the elem x  direction
@@ -150,7 +173,8 @@
 
 ! **********************************************************************************************************************************
 
-      EPS1 = EPSIL(1)
+      EPS1      = EPSIL(1)
+      HEXA8_EAS = (TYPE == 'HEXA8   ') .AND. (IORD >= 2)
 
 ! Calculate ID array
 
@@ -358,6 +382,11 @@
 
          ENDIF
 
+         IF (HEXA8_EAS) THEN
+            CALL BUILD_HEXA8_ASSUMED_STRAIN_DATA ( IERR )
+            IF (IERR > 0) RETURN
+         ENDIF
+
       ENDIF
 
 ! **********************************************************************************************************************************
@@ -371,6 +400,7 @@
 
             DUM0 = ZERO
             DUM1 = ZERO
+            EAS_LOAD = ZERO
 
             IORD_MSG = 'for 3-D solid strains,           input IORD = '
             GAUSS_PT = 0
@@ -378,11 +408,8 @@
                DO J=1,IORD
                   DO I=1,IORD
                      GAUSS_PT = GAUSS_PT + 1
-                     DO L=1,6
-                        DO M=1,3*ELGP
-                           BI(L,M) = B(L,M,GAUSS_PT)
-                        ENDDO
-                     ENDDO
+
+                     BI = B(:,:,GAUSS_PT)
                      DUM0 = MATMUL(TRANSPOSE(BI), EALP)
                      INTFAC = DETJ(GAUSS_PT)*HHH(I)*HHH(J)*HHH(K)
                      IF (DEBUG(191) == 0) THEN             ! Use temperatures at Gauss points for PTE
@@ -392,16 +419,33 @@
                      ELSE                                  ! Use avg element temperature for PTE
                         TEMP = TBAR(N)
                      ENDIF
-                     DO L=1,3*ELGP
-                        DUM1(L) = DUM1(L) + DUM0(L)*TEMP*INTFAC
-                     ENDDO
+                     IF (HEXA8_EAS) THEN
+                        DO L=1,EAS_NUM_MODES
+                           DO M=1,6
+                              EAS_LOAD(L) = EAS_LOAD(L) + EAS_MODE(M,L,GAUSS_PT)*EALP(M)*TEMP*INTFAC
+                           ENDDO
+                        ENDDO
+                     ENDIF
+                     DUM1 = DUM1 + DUM0*TEMP*INTFAC
                   ENDDO
                ENDDO
             ENDDO
 
-            DO L=1,3*ELGP
-               PTE(ID(L),N) = DUM1(L)
-            ENDDO
+            IF (HEXA8_EAS) THEN
+               EAS_HINV_Q = ZERO
+               DO L=1,EAS_NUM_MODES
+                  DO M=1,EAS_NUM_MODES
+                     EAS_HINV_Q(L) = EAS_HINV_Q(L) + EAS_HINV(L,M)*EAS_LOAD(M)
+                  ENDDO
+               ENDDO
+               DO L=1,3*ELGP
+                  DO M=1,EAS_NUM_MODES
+                     DUM1(L) = DUM1(L) - EAS_G(M,L)*EAS_HINV_Q(M)
+                  ENDDO
+               ENDDO
+            ENDIF
+
+            PTE(ID(:),N) = DUM1
 
          ENDDO
 
@@ -444,6 +488,10 @@
           CALL JAC3D ( SSI, SSJ, SSK, DPSHG, 'N', JAC, JACI, DUM_DETJ )
           DPSHX = MATMUL(JACI, DPSHG)
           CALL B3D_ISOPARAMETRIC ( DPSHX, 0, 1, 1, 1, 'all strains', 'N', BI )
+          IF (HEXA8_EAS) THEN
+             CALL HEXA8_INCOMPATIBLE_B ( SSI, SSJ, SSK, JAC0_INV, EAS_MODE_PT )
+             CALL APPLY_HEXA8_EAS_TO_BI ( DUM_DETJ, EAS_MODE_PT, BI )
+          ENDIF
           DUM2 = MATMUL(ES,BI)
 
           DO I=1,3                                         ! Stress-displ matrices
@@ -483,28 +531,21 @@
             DO J=1,IORD
                DO I=1,IORD
                   GAUSS_PT = GAUSS_PT + 1
-                  DO L=1,6
-                     DO M=1,3*ELGP
-                        BI(L,M) = B(L,M,GAUSS_PT)
-                     ENDDO
-                  ENDDO
+                  BI = B(:,:,GAUSS_PT)
                   DUM4 = MATMUL(ES,BI)
                   DUM5 = MATMUL(TRANSPOSE(BI),DUM4)
                   INTFAC = DETJ(GAUSS_PT)*HHH(I)*HHH(J)*HHH(K)
-                  DO L=1,3*ELGP
-                     DO M=1,3*ELGP
-                        DUM3(L,M) = DUM3(L,M) + DUM5(L,M)*INTFAC
-                     ENDDO
-                  ENDDO
+                  DUM3 = DUM3 + DUM5*INTFAC
                ENDDO
             ENDDO
          ENDDO
 
-         DO I=1,3*ELGP
-            DO J=1,3*ELGP
-               KE(ID(I),ID(J)) = DUM3(I,J)
-            ENDDO
-         ENDDO
+         IF (HEXA8_EAS) THEN
+            DUM5 = MATMUL(TRANSPOSE(EAS_G), EAS_HINV_G)
+            DUM3 = DUM3 - DUM5
+         ENDIF
+
+         KE(ID(:),ID(:)) = DUM3
 
 ! Set lower triangular portion of KE equal to upper portion
 
@@ -749,6 +790,174 @@
 ! ##################################################################################################################################
 
       CONTAINS
+
+! ##################################################################################################################################
+
+      SUBROUTINE BUILD_HEXA8_ASSUMED_STRAIN_DATA ( IERR_OUT )
+
+! Build CHEXA8 Simo & Rifai (1990) Q1/E9 EAS data for stiffness, thermal load, and recovery.
+! The nine enhanced strain modes use the centroid Jacobian J0 for the natural-to-physical
+! transformation at all integration points, and are scaled by det(J0)/det(J) to satisfy the
+! patch test on distorted meshes without requiring a mean-strain subtraction.
+
+      IMPLICIT NONE
+
+      INTEGER(LONG), INTENT(OUT)      :: IERR_OUT            ! 0 on success, 1 if EAS_H is singular (degenerate element)
+
+      INTEGER(LONG)                   :: IG, JG, KG          ! Gauss loop indices
+      INTEGER(LONG)                   :: IGP                 ! Gauss point number
+      INTEGER(LONG)                   :: INFO                ! Inversion status for EAS_H
+
+      REAL(DOUBLE)                    :: DBAR(6,3*ELGP)      ! ES*B at one Gauss point
+      REAL(DOUBLE)                    :: DMODE(6,EAS_NUM_MODES) ! ES*EAS_MODE at one Gauss point
+      REAL(DOUBLE)                    :: G_GP(EAS_NUM_MODES,3*ELGP)   ! Gauss point contribution to EAS_G
+      REAL(DOUBLE)                    :: H_GP(EAS_NUM_MODES,EAS_NUM_MODES) ! Gauss point contribution to EAS_H
+      REAL(DOUBLE)                    :: INTFAC2             ! Integration factor at one Gauss point
+      REAL(DOUBLE)                    :: JAC0(3,3)           ! Jacobian at element centroid
+      REAL(DOUBLE)                    :: DPSHG0(3,ELGP)      ! Shape function derivatives at centroid
+      REAL(DOUBLE)                    :: PSH0(ELGP)          ! Shape functions at centroid (unused but required by SHP3DH)
+      REAL(DOUBLE)                    :: SCALE               ! det(J0)/det(J) scaling factor
+
+! **********************************************************************************************************************************
+
+      IERR_OUT = 0
+
+      CALL SHP3DH ( 0, 0, 0, ELGP, SUBR_NAME, IORD_MSG, 1, ZERO, ZERO, ZERO, 'N', PSH0, DPSHG0 )
+      CALL JAC3D ( ZERO, ZERO, ZERO, DPSHG0, 'N', JAC0, JAC0_INV, DETJ0 )
+
+      EAS_G      = ZERO
+      EAS_HINV_G = ZERO
+      EAS_H      = ZERO
+      EAS_HINV   = ZERO
+
+      ! Scale each Gauss point's EAS modes by det(J0)/det(J) so their element-integral is zero,
+      ! satisfying the orthogonality condition (Simo & Rifai 1990, Proposition 3.2).
+      IGP = 0
+      DO KG=1,IORD
+         DO JG=1,IORD
+            DO IG=1,IORD
+               IGP = IGP + 1
+               INTFAC2 = DETJ(IGP)*HHH(IG)*HHH(JG)*HHH(KG)
+               SCALE   = DETJ0 / DETJ(IGP)
+
+               CALL HEXA8_INCOMPATIBLE_B ( SSS(IG), SSS(JG), SSS(KG), JAC0_INV, EAS_MODE(:,:,IGP) )
+               EAS_MODE(:,:,IGP) = SCALE * EAS_MODE(:,:,IGP)
+
+               DBAR  = MATMUL(ES, B(:,:,IGP))
+               G_GP  = MATMUL(TRANSPOSE(EAS_MODE(:,:,IGP)), DBAR)
+               DMODE = MATMUL(ES, EAS_MODE(:,:,IGP))
+               H_GP  = MATMUL(TRANSPOSE(EAS_MODE(:,:,IGP)), DMODE)
+
+               EAS_G = EAS_G + G_GP * INTFAC2
+               EAS_H = EAS_H + H_GP * INTFAC2
+            ENDDO
+         ENDDO
+      ENDDO
+
+      EAS_HINV = EAS_H
+
+      CALL INVERT_FF_MAT ( SUBR_NAME, 'HEXA8 EAS INTERNAL MODE MATRIX', EAS_HINV, EAS_NUM_MODES, INFO )
+
+      IF (INFO == 0) THEN
+         EAS_HINV_G = MATMUL(EAS_HINV, EAS_G)
+      ELSE
+         WRITE(ERR,1927) EID, TYPE
+         WRITE(F06,1927) EID, TYPE
+         NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
+         FATAL_ERR          = FATAL_ERR + 1
+         IERR_OUT           = 1
+      ENDIF
+
+! **********************************************************************************************************************************
+
+ 1927 FORMAT(' *ERROR  1927: ELEMENT ',I8,', TYPE ',A,': EAS INTERNAL MODE STIFFNESS (EAS_H) IS SINGULAR.',                          &
+                    /,14X,' THE ELEMENT IS DEGENERATE (ZERO/NEGATIVE JACOBIAN AT A GAUSS POINT, OR COINCIDENT NODES).'               &
+                    ,/,14X,' CORRECT THE MESH BEFORE RERUNNING.')
+
+      END SUBROUTINE BUILD_HEXA8_ASSUMED_STRAIN_DATA
+
+! ##################################################################################################################################
+
+      SUBROUTINE APPLY_HEXA8_EAS_TO_BI ( DETJ_PT, EAS_MODE_IN, BMAT )
+
+! Apply Simo & Rifai EAS correction to B at a stress/strain recovery point.
+! EAS_MODE_IN is the unscaled enhanced strain field at the recovery point (from HEXA8_INCOMPATIBLE_B);
+! it is scaled here by det(J0)/det(J) before the condensed correction is subtracted from BMAT.
+
+      IMPLICIT NONE
+
+      REAL(DOUBLE), INTENT(IN)        :: DETJ_PT                    ! Jacobian determinant at the recovery point
+      REAL(DOUBLE), INTENT(IN)        :: EAS_MODE_IN(6,EAS_NUM_MODES) ! Enhanced strain modes at the recovery point
+      REAL(DOUBLE), INTENT(INOUT)     :: BMAT(6,3*ELGP)             ! B matrix; EAS correction is subtracted in-place
+
+      REAL(DOUBLE)                    :: EAS_MODE_SCALED(6,EAS_NUM_MODES)
+      REAL(DOUBLE)                    :: CORR(6,3*ELGP)
+
+! **********************************************************************************************************************************
+
+      EAS_MODE_SCALED = (DETJ0 / DETJ_PT) * EAS_MODE_IN
+      CORR = MATMUL(EAS_MODE_SCALED, EAS_HINV_G)
+      BMAT = BMAT - CORR
+
+! **********************************************************************************************************************************
+
+      END SUBROUTINE APPLY_HEXA8_EAS_TO_BI
+
+! ##################################################################################################################################
+
+      SUBROUTINE HEXA8_INCOMPATIBLE_B ( XI, ETA, ZETA, JAC_INV, BMAT )
+
+! Wilson-style incompatible displacement bubbles (1-xi^2, 1-eta^2, 1-zeta^2) for u, v, and w. Their strain
+! columns are the internal strain modes that are condensed out of the CHEXA8 stiffness.
+
+      IMPLICIT NONE
+
+      REAL(DOUBLE), INTENT(IN)        :: XI                 ! Isoparametric xi coordinate
+      REAL(DOUBLE), INTENT(IN)        :: ETA                ! Isoparametric eta coordinate
+      REAL(DOUBLE), INTENT(IN)        :: ZETA               ! Isoparametric zeta coordinate
+      REAL(DOUBLE), INTENT(IN)        :: JAC_INV(3,3)       ! Jacobian inverse at this point
+      REAL(DOUBLE), INTENT(OUT)       :: BMAT(6,EAS_NUM_MODES)
+                                                            ! Internal strain-displacement matrix
+
+      INTEGER(LONG)                   :: IA                 ! Loop index
+      INTEGER(LONG)                   :: MODE               ! Internal mode number
+
+      REAL(DOUBLE)                    :: DNAT(3,3)          ! Natural derivatives of the 3 scalar bubbles
+      REAL(DOUBLE)                    :: DXYZ(3,3)          ! Physical derivatives of the 3 scalar bubbles
+
+! **********************************************************************************************************************************
+
+      BMAT = ZERO
+      DNAT = ZERO
+
+      DNAT(1,1) = -TWO*XI
+      DNAT(2,2) = -TWO*ETA
+      DNAT(3,3) = -TWO*ZETA
+
+      DXYZ = MATMUL(JAC_INV, DNAT)
+
+      DO IA=1,3
+
+         MODE = IA
+         BMAT(1,MODE) = DXYZ(1,IA)
+         BMAT(4,MODE) = DXYZ(2,IA)
+         BMAT(6,MODE) = DXYZ(3,IA)
+
+         MODE = IA + 3
+         BMAT(2,MODE) = DXYZ(2,IA)
+         BMAT(4,MODE) = DXYZ(1,IA)
+         BMAT(5,MODE) = DXYZ(3,IA)
+
+         MODE = IA + 6
+         BMAT(3,MODE) = DXYZ(3,IA)
+         BMAT(5,MODE) = DXYZ(2,IA)
+         BMAT(6,MODE) = DXYZ(1,IA)
+
+      ENDDO
+
+! **********************************************************************************************************************************
+
+      END SUBROUTINE HEXA8_INCOMPATIBLE_B
 
 ! ##################################################################################################################################
 

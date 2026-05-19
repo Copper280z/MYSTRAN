@@ -34,6 +34,7 @@
       USE JAC3D_Interface
       USE B3D_ISOPARAMETRIC_Interface
       USE MATMULT_FFF_T_Interface
+      USE INVERT_FF_MAT_Interface
       USE OUTA_HERE_Interface
       USE ELMDIS_Interface
       USE ELEM_STRE_STRN_ARRAYS_Interface

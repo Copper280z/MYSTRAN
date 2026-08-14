@@ -26,29 +26,25 @@
 
 #include "internal.h"
 
-/* OpenBLAS exposes openblas_set_num_threads() when linked directly.
- * Declare it weakly so the code works with other BLAS implementations too. */
-#if LDLT_USE_SYSTEM_BLAS
-extern void openblas_set_num_threads(int) __attribute__((weak));
-extern int openblas_get_num_threads(void) __attribute__((weak));
+/* OpenBLAS exposes thread controls when linked directly. Other BLAS backends
+ * such as Accelerate do not provide these symbols. */
+#if LDLT_HAVE_OPENBLAS
+extern void openblas_set_num_threads(int);
+extern int openblas_get_num_threads(void);
 #endif
 
 static void blas_set_single_threaded(int *saved) {
-#if LDLT_USE_SYSTEM_BLAS
-  if (openblas_get_num_threads) {
-    *saved = openblas_get_num_threads();
-    openblas_set_num_threads(1);
-  } else {
-    *saved = -1;
-  }
+#if LDLT_HAVE_OPENBLAS
+  *saved = openblas_get_num_threads();
+  openblas_set_num_threads(1);
 #else
   *saved = -1;
 #endif
 }
 
 static void blas_restore_threads(int saved) {
-#if LDLT_USE_SYSTEM_BLAS
-  if (saved > 0 && openblas_set_num_threads)
+#if LDLT_HAVE_OPENBLAS
+  if (saved > 0)
     openblas_set_num_threads(saved);
 #else
   (void)saved;

@@ -77,7 +77,15 @@ if(NOT LDLT_BLAS_UPPER STREQUAL "REFERENCE")
           list(APPEND ldlt_blas_libraries ${LAPACK_LIBRARIES})
         endif()
         set(ldlt_blas_definitions LDLT_USE_SYSTEM_BLAS=1)
-        if(LDLT_CBLAS_LIBRARY MATCHES "[Oo]pen[Bb][Ll][Aa][Ss]")
+        # Use a link check instead of matching the library filename: OpenBLAS
+        # installations may expose CBLAS through a differently named archive.
+        # A strong reference keeps this API available when OpenBLAS is static.
+        set(_ldlt_thread_old_required_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+        set(CMAKE_REQUIRED_LIBRARIES "${LDLT_CBLAS_LIBRARY}")
+        check_function_exists(openblas_set_num_threads LDLT_HAVE_OPENBLAS_THREAD_CONTROL)
+        set(CMAKE_REQUIRED_LIBRARIES "${_ldlt_thread_old_required_libraries}")
+        unset(_ldlt_thread_old_required_libraries)
+        if(LDLT_HAVE_OPENBLAS_THREAD_CONTROL)
           list(APPEND ldlt_blas_definitions LDLT_HAVE_OPENBLAS=1)
         endif()
       endif()

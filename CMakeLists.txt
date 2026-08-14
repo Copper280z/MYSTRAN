@@ -547,6 +547,7 @@ if(USE_SUPERLU_MT)
 
   if(TPL_ENABLE_METISLIB)
     target_compile_definitions(mystran PRIVATE HAVE_METIS)
+    target_compile_definitions(mystran PRIVATE LDLT_HAVE_METIS=1)
   endif()
 else()
   target_link_libraries(mystran superlu)

@@ -85,6 +85,7 @@
       CHARACTER(LEN=*), INTENT(IN)    :: WRITE_WARN         ! If 'Y' write warning messages, otherwise do not
       CHARACTER( 1*BYTE)              :: GET_VVEC           ! If 'Y' run code to get VVEC
       CHARACTER( 1*BYTE)              :: VVEC_DEFINED       ! If 'Y' then a VVEC was found for elements that require one
+      LOGICAL                         :: HEXA8_BUBBLE       ! HEXA8 with IN = BUBBLE: always the enhanced assumed strain element
 
       INTEGER(LONG), INTENT(IN)       :: INT_ELEM_ID        ! Internal element ID
       INTEGER(LONG)                   :: ACID               ! Actual coord sys ID
@@ -503,15 +504,25 @@
          ENDDO
       ENDIF
 
-! Set default integration order if IN = blank
+! Set default integration order if IN = blank. For HEXA8 the default (IN = blank or BUBBLE) is the enhanced assumed strain
+! element with 2x2x2 integration (see subr HEXA), which is the counterpart of the Nastran bubble-function CHEXA8. IN = BUBBLE is
+! an explicit request for that element, so it selects it whatever ISOP says (Nastran defines BUBBLE only with ISOP blank).
 
-      IF (ISOLID(4) == -1) THEN
+      HEXA8_BUBBLE = (TYPE == 'HEXA8') .AND. (ISOLID(4) == 0)
 
-        IF (TYPE == 'HEXA8'  ) THEN
-            WRITE(ERR,1964) TYPE
-            WRITE(F06,1964) TYPE
+      IF ((TYPE == 'HEXA20') .OR. (TYPE(1:5) == 'PENTA') .OR. (TYPE(1:5) == 'TETRA')) THEN
+         IF (ISOLID(4) == 0) THEN                          ! IN = BUBBLE is only meaningful for HEXA8
+            WRITE(ERR,1965) "IN","BUBBLE",TYPE
+            WRITE(F06,1965) "IN","BUBBLE",TYPE
             NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
             FATAL_ERR = FATAL_ERR + 1
+         ENDIF
+      ENDIF
+
+      IF ((ISOLID(4) == -1) .OR. ((ISOLID(4) == 0) .AND. (TYPE == 'HEXA8'))) THEN
+
+        IF (TYPE == 'HEXA8'  ) THEN
+            ISOLID(4) = 2
         ELSE IF (TYPE == 'HEXA20' ) THEN
             ISOLID(4) = 3
         ELSE IF (TYPE == 'PENTA6' ) THEN
@@ -600,6 +611,8 @@
         ENDIF
 
       END IF
+
+      IF (HEXA8_BUBBLE) ISOLID(6) = 0                      ! IN = BUBBLE: enhanced assumed strain element, also with ISOP = FULL
 
 
 ! **********************************************************************************************************************************

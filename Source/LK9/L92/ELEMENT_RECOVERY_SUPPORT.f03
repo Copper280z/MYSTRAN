@@ -329,10 +329,15 @@
             ENDDO
          ENDDO
 
-! For solids the element routines (HEXA, PENTA, TETRA) put the temperature minus TREF at each recovery point in STE3(1), so that
-! stress = ES*(strain - alpha*(T(x) - TREF)) with the temperature of the point.
+! For solids the element routines (HEXA, PENTA, TETRA) put the thermal data of each recovery point in STE1-3:
+!   STE1(1:3), STE2(1:3): strains of the condensed internal modes due to temperature (HEXA8 EAS: M*inv(H)*q; otherwise zero),
+!                         part of the element strain field BE*u + STE
+!   STE3(1)             : temperature minus TREF at the recovery point
+! so that stress = ES*(strain - alpha*(T(x) - TREF)) with the strain and temperature of the point.
 
          IF (SUBLOD(INT_SC_NUM,2) > 0) THEN
+            STRAIN(1:3) = STRAIN(1:3) + STE1(:,JTSUB,STR_PT_NUM)
+            STRAIN(4:6) = STRAIN(4:6) + STE2(:,JTSUB,STR_PT_NUM)
             ALPT = ALPVEC(:,1)*STE3(1,JTSUB,STR_PT_NUM)
          ELSE
             ALPT = ZERO

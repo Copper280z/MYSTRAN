@@ -1640,8 +1640,10 @@
       REAL(DOUBLE) , ALLOCATABLE      :: SE3(:,:,:)          ! Array of elem transv shear strain per unit displ for elem
 
       REAL(DOUBLE) , ALLOCATABLE      :: STE1(:,:,:)         ! Elem thermal stress corrections for membrane stress
+!                                                              (3D solids: internal-mode thermal normal strains)
 
       REAL(DOUBLE) , ALLOCATABLE      :: STE2(:,:,:)         ! Elem thermal stress corrections for bending stress
+!                                                              (3D solids: internal-mode thermal shear strains)
 
       REAL(DOUBLE) , ALLOCATABLE      :: STE3(:,:,:)         ! Elem thermal stress corrections for transv shear stress
 !                                                              (3D solids: row 1 = temperature - TREF at the point)

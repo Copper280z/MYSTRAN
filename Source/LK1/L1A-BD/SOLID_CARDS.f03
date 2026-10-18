@@ -776,6 +776,8 @@
       CALL LEFT_ADJ_BDFLD ( CHR_FLD )
       IF       (CHR_FLD(1:) == ' ') THEN
          PSOLID(NPSOLID,4) = -1                            ! Temporary value that will be changed in ELMDAT1
+      ELSE IF ((CHR_FLD(1:8) == 'BUBBLE  ') .OR. (CHR_FLD(1:8) == '0       ')) THEN
+         PSOLID(NPSOLID,4) = 0                             ! Bubble (enhanced strain) HEXA8; resolved in ELMDAT1
       ELSE IF ((CHR_FLD(1:8) == 'TWO     ') .OR. (CHR_FLD(1:8) == '2       ')) THEN
          PSOLID(NPSOLID,4) = 2
       ELSE IF ((CHR_FLD(1:8) == 'THREE   ') .OR. (CHR_FLD(1:8) == '3       ')) THEN

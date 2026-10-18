@@ -43,7 +43,22 @@
 
       SUBROUTINE HEXA ( OPT, INT_ELEM_ID,IORD, RED_INT_SHEAR, WRITE_WARN )
 
-! Isoparametric hexahedron solid element (8 or 20 nodes and with full or reduced gaussian integration)
+! Isoparametric hexahedron solid element (8 or 20 nodes)
+
+! Formulation (selected by PSOLID ISOP; RED_INT_SHEAR = 'Y' for ISOP blank/REDUCED, which is the default):
+
+!  HEXA8,  ISOP blank/REDUCED: Enhanced assumed strain element Q1/E21 (Andelfinger & Ramm 1993). 21 internal strain modes,
+!                              defined in the natural (xi,eta,zeta) frame and symmetric in the three directions, are pushed
+!                              forward with the centroid Jacobian and scaled by det(J0)/det(J) (Simo & Rifai 1990) so the
+!                              element passes the patch test on distorted meshes. The modes are statically condensed at the
+!                              element level. Relieves shear (bending) and volumetric locking without any preferred direction,
+!                              is invariant to rigid rotation and to node relabeling, and has no spurious zero-energy modes.
+!  HEXA20, ISOP blank/REDUCED: IN = TWO: Jacobian-weighted averages of the shear rows of B over the Gauss points of opposite faces.
+!                              IN = THREE: shear strain energy integrated with 2x2x2 points, the rest with 3x3x3.
+!  ISOP = FULL               : Standard displacement-based isoparametric element with full Gaussian integration.
+
+! For HEXA8 the same enhanced strain-displacement operator is used consistently for the stiffness, the thermal loads and the
+! stress/strain recovery matrices.
 
 ! Subroutine calculates:
 
@@ -57,13 +72,13 @@
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE IOUNT1, ONLY                :  ERR, F06
       USE SCONTR, ONLY                :  BLNK_SUB_NAM, FATAL_ERR, MAX_ORDER_GAUSS, MELDOF, MPLOAD4_3D_DATA, NPLOAD4_3D, NSUB, NTSUB
-      USE CONSTANTS_1, ONLY           :  QUARTER, HALF, ZERO, ONE
+      USE CONSTANTS_1, ONLY           :  QUARTER, HALF, ZERO, ONE, TWO
       USE DEBUG_PARAMETERS, ONLY      :  DEBUG
       USE PARAMS, ONLY                :  EPSIL
       USE NONLINEAR_PARAMS, ONLY      :  LOAD_ISTEP
       USE MODEL_STUF, ONLY            :  AGRID, ALPVEC, BE1, BE2, DT, EID, ELGP, NUM_EMG_FATAL_ERRS, ES, KE, KED, ME,              &
-                                         NUM_EMG_FATAL_ERRS, PLOAD4_3D_DATA, PPE, PRESS, PTE, RHO, SE1, SE2, STE3, STRESS, TREF,   &
-                                         TYPE, XEL
+                                         NUM_EMG_FATAL_ERRS, PLOAD4_3D_DATA, PPE, PRESS, PTE, RHO, SE1, SE2, STE1, STE2, STE3,     &
+                                         STRESS, TREF, TYPE, XEL
       USE FILE_LIFECYCLE, ONLY   :  OUTA_HERE
       USE RESULT_COORDINATES, ONLY    :  ELMDIS
       USE ELEMENT_RECOVERY_SUPPORT, ONLY:  ELEM_STRE_STRN_ARRAYS
@@ -73,7 +88,8 @@
       IMPLICIT NONE
 
       CHARACTER(LEN=LEN(BLNK_SUB_NAM)):: SUBR_NAME = 'HEXA'
-      CHARACTER( 1*BYTE), INTENT(IN)  :: RED_INT_SHEAR          ! If 'Y', use Gaussian weighted avg of B matrices for shear terms
+      CHARACTER( 1*BYTE), INTENT(IN)  :: RED_INT_SHEAR          ! 'Y' for ISOP blank/REDUCED: use the EAS (HEXA8) or reduced shear (HEXA20)
+!                                                                 formulation. 'N' for ISOP = FULL: standard displacement element
       CHARACTER( 1*BYTE), INTENT(IN)  :: OPT(6)                 ! 'Y'/'N' flags for whether to calc certain elem matrices
       CHARACTER(LEN=*), INTENT(IN)    :: WRITE_WARN             ! If 'Y" write warning messages, otherwise do not
 
@@ -84,6 +100,7 @@
 
       INTEGER(LONG), INTENT(IN)       :: INT_ELEM_ID             ! Internal element ID
       INTEGER(LONG), INTENT(IN)       :: IORD                   ! Gaussian integration order for element
+      INTEGER(LONG), PARAMETER        :: EAS_NUM_MODES = 21_LONG ! Q1/E21 enhanced strain modes for HEXA8
       INTEGER(LONG)                   :: ELIDA,ELIDI            ! Actual and internal elem ID's read from array PLOAD4_3D_DATA
       INTEGER(LONG)                   :: FACE_COUNT             ! Count of the num of HEXA faces processed for PLOAD4 pressure loads
       INTEGER(LONG)                   :: FACE_NODES(6,4)        ! Array of actual   grid numbers on the 6 faces of the HEXA
@@ -102,7 +119,6 @@
       INTEGER(LONG)                   :: ISCNUM                 ! Internal subcase number read from array PLOAD4_3D_DATA
       INTEGER(LONG)                   :: K1,K2,K3,K4            ! Array indices
       INTEGER(LONG)                   :: K5,K6,K7,K8            ! Array indices
-                                                                ! Indicator of no output of elem data to BUG file
 
       INTEGER(LONG)                   :: STR_PT_NUM             ! Stress point number. 1 is center, 2+ are element nodes 1+.
 
@@ -133,8 +149,26 @@
       REAL(DOUBLE)                    :: DUM8(ELGP,ELGP)        ! Intermediate matrix used in solving for elem matrices
       REAL(DOUBLE)                    :: DUM9(3,ELGP)           ! Intermediate matrix used in solving for elem matrices
 
+      REAL(DOUBLE)                    :: EAS_G(EAS_NUM_MODES,3*ELGP)
+                                                                ! HEXA8 EAS coupling matrix  G = integral(M' * ES * B dV)
+      REAL(DOUBLE)                    :: EAS_HFAC(EAS_NUM_MODES,EAS_NUM_MODES)
+                                                                ! Cholesky factor of the equilibrated internal-mode stiffness
+!                                                                 D*H*D, H = integral(M' * ES * M dV), D = diag(H)^(-1/2)
+      REAL(DOUBLE)                    :: EAS_HSCL(EAS_NUM_MODES)! Diagonal equilibration D of H
+      REAL(DOUBLE)                    :: EAS_HINV_G(EAS_NUM_MODES,3*ELGP)
+                                                                ! inv(H)*G (internal modes in terms of the element displacements)
+      REAL(DOUBLE)                    :: EAS_HINV_Q(EAS_NUM_MODES,NTSUB)
+                                                                ! inv(H)*q for the internal-mode thermal load of each thermal subcase,
+!                                                                 q = integral(M' * ES * eps_th dV)
+      REAL(DOUBLE)                    :: EAS_MODE(6,EAS_NUM_MODES,IORD*IORD*IORD)
+                                                                ! Enhanced strain modes M (Cartesian, det-scaled) at each Gauss pt
+      REAL(DOUBLE)                    :: EAS_MODE_PT(6,EAS_NUM_MODES)
+                                                                ! Enhanced strain modes at a recovery point
+      REAL(DOUBLE)                    :: EAS_T0(6,6)            ! Natural -> Cartesian strain transformation built from J0
+
       REAL(DOUBLE)                    :: EALP(6)                ! Variable used in calc PTE therm loads & STEi therm stress coeffs
       REAL(DOUBLE)                    :: EPS1                   ! A small number to compare to real zero
+      REAL(DOUBLE)                    :: EPS_Q_PT(6,NTSUB)      ! HEXA8 EAS: internal-mode thermal strains M*inv(H)*q at a recovery pt
       REAL(DOUBLE)                    :: FACE_AREA              ! Area of a face of the HEXA where a PLOAD4 pressure acts
 
                                                                 ! Array of all DT values at the grids GRID_DT_ARRAY(i,j) = DT(i,j)
@@ -146,6 +180,11 @@
       REAL(DOUBLE)                    :: JAC(3,3)               ! An output from subr JAC3D, called herein. 3 x 3 Jacobian matrix.
       REAL(DOUBLE)                    :: JACI(3,3)              ! An output from subr JAC3D, called herein. 3 x 3 Jacobian inverse.
       REAL(DOUBLE)                    :: KWW(3,3)               ! Portion of differential stiffness matrix
+
+      LOGICAL                         :: HEXA8_EAS              ! True for HEXA8  with the default (EAS) formulation
+
+      REAL(DOUBLE)                    :: JAC0_INV(3,3)          ! Jacobian inverse at element centroid (Simo & Rifai J0)
+      REAL(DOUBLE)                    :: DETJ0                  ! Determinant of centroid Jacobian
       REAL(DOUBLE)                    :: PSH(ELGP)              ! Output from subr SHP3DH. Shape fcn at Gauss pts SSI, SSJ
       REAL(DOUBLE)                    :: PSIGN                  !
       REAL(DOUBLE)                    :: SIGxx                  ! Normal stress in the elem x  direction
@@ -170,7 +209,8 @@
 
 ! **********************************************************************************************************************************
 
-      EPS1 = EPSIL(1)
+      EPS1      = EPSIL(1)
+      HEXA8_EAS = (TYPE == 'HEXA8   ') .AND. (RED_INT_SHEAR == 'Y')
 
 ! Calculate ID array
 
@@ -295,7 +335,7 @@
             ENDDO
          ENDDO
 
-         IF (RED_INT_SHEAR == 'Y') THEN
+         IF ((RED_INT_SHEAR == 'Y') .AND. (.NOT. HEXA8_EAS)) THEN      ! HEXA20 reduced shear (HEXA8 uses EAS instead)
 
             IF (IORD == 2) THEN                               ! Use selective substitution for the 2x2x2 integration
 
@@ -378,6 +418,12 @@
 
          ENDIF
 
+         IF (HEXA8_EAS) THEN
+            CALL BUILD_HEXA8_ASSUMED_STRAIN_DATA ( IERR )
+            IF (IERR > 0) RETURN
+            IF ((OPT(2) == 'Y') .OR. (OPT(3) == 'Y') .OR. (OPT(6) == 'Y')) CALL BUILD_HEXA8_EAS_THERMAL_DATA
+         ENDIF
+
       ENDIF
 
 ! **********************************************************************************************************************************
@@ -398,11 +444,8 @@
                DO J=1,IORD
                   DO I=1,IORD
                      GAUSS_PT = GAUSS_PT + 1
-                     DO L=1,6
-                        DO M=1,3*ELGP
-                           BI(L,M) = B(L,M,GAUSS_PT)
-                        ENDDO
-                     ENDDO
+
+                     BI = B(:,:,GAUSS_PT)
                      DUM0 = MATMUL(TRANSPOSE(BI), EALP)
                      INTFAC = DETJ(GAUSS_PT)*HHH(I)*HHH(J)*HHH(K)
                      IF (DEBUG(191) == 0) THEN             ! Use temperatures at Gauss points for PTE
@@ -412,16 +455,20 @@
                      ELSE                                  ! Use avg element temperature for PTE
                         TEMP = TBAR(N)
                      ENDIF
-                     DO L=1,3*ELGP
-                        DUM1(L) = DUM1(L) + DUM0(L)*TEMP*INTFAC
-                     ENDDO
+                     DUM1 = DUM1 + DUM0*TEMP*INTFAC
                   ENDDO
                ENDDO
             ENDDO
 
-            DO L=1,3*ELGP
-               PTE(ID(L),N) = DUM1(L)
-            ENDDO
+            IF (HEXA8_EAS) THEN                         ! Condense the internal-mode thermal load: PTE = PTE - G'*inv(H)*q
+               DO L=1,3*ELGP
+                  DO M=1,EAS_NUM_MODES
+                     DUM1(L) = DUM1(L) - EAS_G(M,L)*EAS_HINV_Q(M,N)
+                  ENDDO
+               ENDDO
+            ENDIF
+
+            PTE(ID(:),N) = DUM1
 
          ENDDO
 
@@ -466,9 +513,9 @@
           IORD_MSG = 'for 3-D solid strains,                      = '
           CALL SHP3DH ( 0, 0, 0, ELGP, SUBR_NAME, IORD_MSG, 1, SSI, SSJ, SSK, 'N', PSH, DPSHG )
           IF (SCALED_JACOBIAN(DPSHG) > EPS1) THEN
-             CALL HEXA_STRAIN_DISPL ( SSI, SSJ, SSK, BI )
+             CALL HEXA_STRAIN_DISPL ( SSI, SSJ, SSK, BI, EPS_Q_PT )
           ELSE
-             CALL HEXA_EXTRAPOLATED_STRAIN_DISPL ( SSI, SSJ, SSK, BI )
+             CALL HEXA_EXTRAPOLATED_STRAIN_DISPL ( SSI, SSJ, SSK, BI, EPS_Q_PT )
           ENDIF
           DUM2 = MATMUL(ES,BI)
 
@@ -479,12 +526,10 @@
             ENDDO
           ENDDO
 
-          DO J=1,NTSUB                                     ! Thermal recovery data (see ELEM_STRE_STRN_ARRAYS): temperature
-            IF (DEBUG(191) == 0) THEN                      ! minus TREF at the point (element average, as for PTE, with
-               STE3(1,J,STR_PT_NUM) = DOT_PRODUCT(PSH, DT(1:ELGP,J)) - TREF1   ! DEBUG(191) > 0)
-            ELSE
-               STE3(1,J,STR_PT_NUM) = TBAR(J)
-            ENDIF
+          DO J=1,NTSUB                                     ! Thermal recovery data (see ELEM_STRE_STRN_ARRAYS): internal-mode
+            STE1(1:3,J,STR_PT_NUM) = EPS_Q_PT(1:3,J)       ! thermal strains and the temperature at the point
+            STE2(1:3,J,STR_PT_NUM) = EPS_Q_PT(4:6,J)
+            STE3(1  ,J,STR_PT_NUM) = SOLID_POINT_TEMPERATURE ( PSH, J )
           ENDDO
 
           DO I=1,3                                         ! Strain-displ matrices
@@ -505,27 +550,19 @@
 
          DUM3 = ZERO
 
-         RED3 = ((RED_INT_SHEAR == 'Y') .AND. (IORD == 3))
+         RED3 = ((RED_INT_SHEAR == 'Y') .AND. (IORD == 3) .AND. (.NOT. HEXA8_EAS))
          IORD_MSG = ' '
          GAUSS_PT = 0
          DO K=1,IORD
             DO J=1,IORD
                DO I=1,IORD
                   GAUSS_PT = GAUSS_PT + 1
-                  DO L=1,6
-                     DO M=1,3*ELGP
-                        BI(L,M) = B(L,M,GAUSS_PT)
-                     ENDDO
-                  ENDDO
-                  IF (RED3) BI(4:6,:) = ZERO                      ! shear terms are integrated separately with 2x2x2 points                  
+                  BI = B(:,:,GAUSS_PT)
+                  IF (RED3) BI(4:6,:) = ZERO                      ! shear terms are integrated separately with 2x2x2 points
                   DUM4 = MATMUL(ES,BI)
                   DUM5 = MATMUL(TRANSPOSE(BI),DUM4)
                   INTFAC = DETJ(GAUSS_PT)*HHH(I)*HHH(J)*HHH(K)
-                  DO L=1,3*ELGP
-                     DO M=1,3*ELGP
-                        DUM3(L,M) = DUM3(L,M) + DUM5(L,M)*INTFAC
-                     ENDDO
-                  ENDDO
+                  DUM3 = DUM3 + DUM5*INTFAC
                ENDDO
             ENDDO
          ENDDO
@@ -550,6 +587,11 @@
                   ENDDO
                ENDDO
             ENDDO
+         ENDIF
+
+         IF (HEXA8_EAS) THEN                                  ! Static condensation of the EAS internal modes: K - G'*inv(H)*G
+            DUM5 = MATMUL(TRANSPOSE(EAS_G), EAS_HINV_G)
+            DUM3 = DUM3 - DUM5
          ENDIF
 
          DO I=1,3*ELGP
@@ -834,18 +876,22 @@
 
 ! ##################################################################################################################################
 
-      SUBROUTINE HEXA_STRAIN_DISPL ( XI, ETA, ZETA, BMAT )
+      SUBROUTINE HEXA_STRAIN_DISPL ( XI, ETA, ZETA, BMAT, EPS_Q )
 
-! Strain-displacement matrix used for stress/strain recovery at isoparametric point (XI,ETA,ZETA)
+! Strain-displacement matrix used for stress/strain recovery at isoparametric point (XI,ETA,ZETA): the compatible B including the
+! condensed enhanced strains for HEXA8 EAS. The condensed internal modes alpha = inv(H)*(q - G*u) also carry the thermal part
+! inv(H)*q, so the element strain at the point is BMAT*u + EPS_Q
 
       IMPLICIT NONE
 
       REAL(DOUBLE), INTENT(IN)        :: XI, ETA, ZETA       ! Isoparametric coordinates of the point
       REAL(DOUBLE), INTENT(OUT)       :: BMAT(6,3*ELGP)      ! Strain-displacement matrix
+      REAL(DOUBLE), INTENT(OUT)       :: EPS_Q(6,NTSUB)      ! Internal-mode thermal strains M*inv(H)*q (zero unless HEXA8 EAS)
 
       REAL(DOUBLE)                    :: DETJ_PT             ! det(J) at the point
       REAL(DOUBLE)                    :: DPSHG_PT(3,ELGP)    ! Shape function derivatives w.r.t. xi, eta, zeta
       REAL(DOUBLE)                    :: DPSHX_PT(3,ELGP)    ! Shape function derivatives w.r.t. x, y, z
+      REAL(DOUBLE)                    :: EAS_CORR(6,3*ELGP)  ! Condensed enhanced strain-displacement terms
       REAL(DOUBLE)                    :: JAC_PT(3,3)         ! Jacobian at the point
       REAL(DOUBLE)                    :: JACI_PT(3,3)        ! Inverse Jacobian at the point
       REAL(DOUBLE)                    :: PSH_PT(ELGP)        ! Shape functions at the point
@@ -857,26 +903,37 @@
       DPSHX_PT = MATMUL(JACI_PT, DPSHG_PT)
       CALL B3D_ISOPARAMETRIC ( DPSHX_PT, 0, 1, 1, 1, 'all strains', 'N', BMAT )
 
+      EPS_Q = ZERO
+      IF (HEXA8_EAS) THEN
+         CALL HEXA8_EAS_MODES ( XI, ETA, ZETA, DETJ_PT, EAS_MODE_PT )
+         EAS_CORR = MATMUL(EAS_MODE_PT, EAS_HINV_G)
+         BMAT     = BMAT - EAS_CORR
+         IF (NTSUB > 0) EPS_Q = MATMUL(EAS_MODE_PT, EAS_HINV_Q)
+      ENDIF
+
 ! **********************************************************************************************************************************
 
       END SUBROUTINE HEXA_STRAIN_DISPL
 
 ! ##################################################################################################################################
 
-      SUBROUTINE HEXA_EXTRAPOLATED_STRAIN_DISPL ( XI, ETA, ZETA, BMAT )
+      SUBROUTINE HEXA_EXTRAPOLATED_STRAIN_DISPL ( XI, ETA, ZETA, BMAT, EPS_Q )
 
 ! Strain-displacement matrix at (XI,ETA,ZETA) obtained by trilinear extrapolation of the recovery B from the 2x2x2 Gauss points
 ! (xi, eta, zeta = +/- 1/sqrt(3)). Used at points where the Jacobian is not positive. The extrapolation reproduces any trilinear
-! strain field, so constant strain (patch test) and the strain of an affine (parallelepiped) HEXA8 are recovered exactly.
+! strain field, so constant strain (patch test) and the strain of an affine (parallelepiped) HEXA8 are recovered exactly. The
+! internal-mode thermal strains are extrapolated the same way.
 
       IMPLICIT NONE
 
       REAL(DOUBLE), INTENT(IN)        :: XI, ETA, ZETA       ! Isoparametric coordinates of the point
       REAL(DOUBLE), INTENT(OUT)       :: BMAT(6,3*ELGP)      ! Strain-displacement matrix
+      REAL(DOUBLE), INTENT(OUT)       :: EPS_Q(6,NTSUB)      ! Internal-mode thermal strains (see HEXA_STRAIN_DISPL)
 
       INTEGER(LONG)                   :: IC                  ! Corner (sampling point) index
 
       REAL(DOUBLE)                    :: BG(6,3*ELGP)        ! Recovery B at one sampling point
+      REAL(DOUBLE)                    :: EPS_QG(6,NTSUB)     ! Internal-mode thermal strains at one sampling point
       REAL(DOUBLE)                    :: GSIGN(3)            ! Signs of the sampling point coordinates
       REAL(DOUBLE)                    :: LG                  ! Trilinear interpolation weight of the sampling point
       REAL(DOUBLE)                    :: S3                  ! sqrt(3)
@@ -885,18 +942,318 @@
 
       S3    = SQRT(3.0_DOUBLE)
       BMAT  = ZERO
+      EPS_Q = ZERO
       DO IC=1,8
          GSIGN(1) = MERGE( ONE, -ONE, (IC == 2) .OR. (IC == 3) .OR. (IC == 6) .OR. (IC == 7))
          GSIGN(2) = MERGE( ONE, -ONE, (IC == 3) .OR. (IC == 4) .OR. (IC == 7) .OR. (IC == 8))
          GSIGN(3) = MERGE( ONE, -ONE, IC >= 5)
-         CALL HEXA_STRAIN_DISPL ( GSIGN(1)/S3, GSIGN(2)/S3, GSIGN(3)/S3, BG )
+         CALL HEXA_STRAIN_DISPL ( GSIGN(1)/S3, GSIGN(2)/S3, GSIGN(3)/S3, BG, EPS_QG )
          LG    = (ONE + S3*GSIGN(1)*XI)*(ONE + S3*GSIGN(2)*ETA)*(ONE + S3*GSIGN(3)*ZETA)/8.0_DOUBLE
          BMAT  = BMAT  + LG*BG
+         EPS_Q = EPS_Q + LG*EPS_QG
       ENDDO
 
 ! **********************************************************************************************************************************
 
       END SUBROUTINE HEXA_EXTRAPOLATED_STRAIN_DISPL
+
+! ##################################################################################################################################
+
+      SUBROUTINE BUILD_HEXA8_ASSUMED_STRAIN_DATA ( IERR_OUT )
+
+! Build the HEXA8 Q1/E21 enhanced assumed strain data used by the stiffness, thermal load and recovery calculations:
+
+!   M(xi)  = det(J0)/det(J(xi)) * T0 * Mnat(xi)        enhanced strain modes (Simo & Rifai 1990; Andelfinger & Ramm 1993)
+!   G      = integral( M' * ES * B dV )
+!   H      = integral( M' * ES * M dV )
+!   KE     = integral( B' * ES * B dV ) - G' * inv(H) * G
+
+! Every mode of Mnat has a zero integral over the parent cube, so with the det(J0)/det(J) scaling the enhanced strains are
+! orthogonal to constant stress on any element shape (patch test). H is solved with a Cholesky factorization of the diagonally
+! equilibrated matrix D*H*D, which removes the dependence of its condition number on element size and aspect ratio.
+
+      IMPLICIT NONE
+
+      INTEGER(LONG), INTENT(OUT)      :: IERR_OUT            ! 0 on success, 1 if H is not positive definite (degenerate element)
+
+      INTEGER(LONG)                   :: IG, JG, KG          ! Gauss loop indices
+      INTEGER(LONG)                   :: IGP                 ! Gauss point number
+      INTEGER(LONG)                   :: II, JJ_             ! Loop indices
+      INTEGER(LONG)                   :: INFO                ! LAPACK status
+
+      REAL(DOUBLE)                    :: DPSHG0(3,ELGP)      ! Shape function derivatives at the centroid
+      REAL(DOUBLE)                    :: EAS_H(EAS_NUM_MODES,EAS_NUM_MODES)
+                                                             ! Internal-mode stiffness H
+      REAL(DOUBLE)                    :: ESM(6,EAS_NUM_MODES)! ES*M at one Gauss point
+      REAL(DOUBLE)                    :: G_GP(EAS_NUM_MODES,3*ELGP)
+                                                             ! M'*ES*B at one Gauss point
+      REAL(DOUBLE)                    :: INTFAC2             ! Integration factor at one Gauss point
+      REAL(DOUBLE)                    :: JAC0(3,3)           ! Jacobian at the element centroid
+      REAL(DOUBLE)                    :: PSH0(ELGP)          ! Shape functions at the centroid (required by SHP3DH, not used)
+
+! **********************************************************************************************************************************
+
+      IERR_OUT = 0
+
+      CALL SHP3DH ( 0, 0, 0, ELGP, SUBR_NAME, IORD_MSG, 1, ZERO, ZERO, ZERO, 'N', PSH0, DPSHG0 )
+      CALL JAC3D ( ZERO, ZERO, ZERO, DPSHG0, 'N', JAC0, JAC0_INV, DETJ0 )
+      CALL SOLID_STRAIN_TRANSFORM ( JAC0_INV, EAS_T0 )
+
+      EAS_G = ZERO
+      EAS_H = ZERO
+
+      IGP = 0
+      DO KG=1,IORD
+         DO JG=1,IORD
+            DO IG=1,IORD
+               IGP = IGP + 1
+               INTFAC2 = DETJ(IGP)*HHH(IG)*HHH(JG)*HHH(KG)
+               CALL HEXA8_EAS_MODES ( SSS(IG), SSS(JG), SSS(KG), DETJ(IGP), EAS_MODE(:,:,IGP) )
+               ESM   = MATMUL(ES, EAS_MODE(:,:,IGP))
+               G_GP  = MATMUL(TRANSPOSE(ESM), B(:,:,IGP))
+               EAS_G = EAS_G + G_GP*INTFAC2
+               EAS_H = EAS_H + MATMUL(TRANSPOSE(EAS_MODE(:,:,IGP)), ESM)*INTFAC2
+            ENDDO
+         ENDDO
+      ENDDO
+
+      INFO = 0
+      DO II=1,EAS_NUM_MODES
+         IF (EAS_H(II,II) > ZERO) THEN
+            EAS_HSCL(II) = ONE/SQRT(EAS_H(II,II))
+         ELSE
+            INFO = II
+            EXIT
+         ENDIF
+      ENDDO
+
+      IF (INFO == 0) THEN
+         DO JJ_=1,EAS_NUM_MODES
+            DO II=1,EAS_NUM_MODES
+               EAS_HFAC(II,JJ_) = EAS_HSCL(II)*EAS_H(II,JJ_)*EAS_HSCL(JJ_)
+            ENDDO
+         ENDDO
+         CALL DPOTRF ( 'U', EAS_NUM_MODES, EAS_HFAC, EAS_NUM_MODES, INFO )
+      ENDIF
+
+      IF (INFO /= 0) THEN
+         WRITE(ERR,1966) EID, TYPE, 'EAS INTERNAL MODE STIFFNESS H', INFO
+         WRITE(F06,1966) EID, TYPE, 'EAS INTERNAL MODE STIFFNESS H', INFO
+         NUM_EMG_FATAL_ERRS = NUM_EMG_FATAL_ERRS + 1
+         FATAL_ERR          = FATAL_ERR + 1
+         IERR_OUT           = 1
+         RETURN
+      ENDIF
+
+      EAS_HINV_G = EAS_G
+      CALL HEXA8_EAS_SOLVE ( 3*ELGP, EAS_HINV_G )
+
+! **********************************************************************************************************************************
+ 1966 FORMAT(' *ERROR  1966: ELEMENT ',I8,', TYPE ',A,': ',A,' IS NOT POSITIVE DEFINITE (CHOLESKY PIVOT ',I3,').',               &
+                    /,14X,' THE ELEMENT IS DEGENERATE (COINCIDENT NODES, OR ZERO/NEGATIVE JACOBIAN AT AN INTEGRATION POINT)',     &
+                    /,14X,' OR ITS MATERIAL MATRIX IS NOT POSITIVE DEFINITE. CORRECT THE MODEL BEFORE RERUNNING.')
+
+      END SUBROUTINE BUILD_HEXA8_ASSUMED_STRAIN_DATA
+
+! ##################################################################################################################################
+
+      SUBROUTINE BUILD_HEXA8_EAS_THERMAL_DATA
+
+! EAS_HINV_Q = inv(H)*q for the internal-mode thermal load q = integral( M' * ES * alpha*(T - TREF) dV ) of every thermal subcase,
+! with T at the Gauss points (the element average with DEBUG(191) > 0, as for PTE). The condensed thermal load PTE and the
+! recovered strains B*u + M*inv(H)*q both use it, so the recovered strain is that of the element's own internal modes
+! alpha = inv(H)*(q - G*u). It is built for every call that needs either, including recovery calls without OPT(2).
+
+      IMPLICIT NONE
+
+      INTEGER(LONG)                   :: IG, JG, KG          ! Gauss loop indices
+      INTEGER(LONG)                   :: IGP                 ! Gauss point number
+      INTEGER(LONG)                   :: NT                  ! Thermal subcase index
+
+      REAL(DOUBLE)                    :: DPSHG_GP(3,ELGP)    ! Shape function derivatives at the Gauss point (not used)
+      REAL(DOUBLE)                    :: INTFAC2             ! Integration factor at one Gauss point
+      REAL(DOUBLE)                    :: MEALP(EAS_NUM_MODES)! M' * ES * alpha at one Gauss point
+      REAL(DOUBLE)                    :: PSH_GP(ELGP)        ! Shape functions at the Gauss point
+      REAL(DOUBLE)                    :: TEMP_GP             ! Temperature minus TREF at the Gauss point
+
+! **********************************************************************************************************************************
+
+      EAS_HINV_Q = ZERO
+      IF (NTSUB <= 0) RETURN
+
+      IGP = 0
+      DO KG=1,IORD
+         DO JG=1,IORD
+            DO IG=1,IORD
+               IGP = IGP + 1
+               INTFAC2 = DETJ(IGP)*HHH(IG)*HHH(JG)*HHH(KG)
+               MEALP   = MATMUL(TRANSPOSE(EAS_MODE(:,:,IGP)), EALP)
+               CALL SHP3DH ( IG, JG, KG, ELGP, SUBR_NAME, IORD_MSG, IORD, SSS(IG), SSS(JG), SSS(KG), 'N', PSH_GP, DPSHG_GP )
+               DO NT=1,NTSUB
+                  TEMP_GP = SOLID_POINT_TEMPERATURE ( PSH_GP, NT )
+                  EAS_HINV_Q(:,NT) = EAS_HINV_Q(:,NT) + MEALP*TEMP_GP*INTFAC2
+               ENDDO
+            ENDDO
+         ENDDO
+      ENDDO
+
+      CALL HEXA8_EAS_SOLVE ( NTSUB, EAS_HINV_Q )
+
+! **********************************************************************************************************************************
+
+      END SUBROUTINE BUILD_HEXA8_EAS_THERMAL_DATA
+
+! ##################################################################################################################################
+
+      FUNCTION SOLID_POINT_TEMPERATURE ( PSH_PT, NT )
+
+! Temperature minus TREF at a point with shape functions PSH_PT, thermal subcase NT. With DEBUG(191) > 0 the element average
+! TBAR is used instead, as for the thermal loads PTE.
+
+      IMPLICIT NONE
+
+      INTEGER(LONG), INTENT(IN)       :: NT                  ! Thermal subcase index
+      REAL(DOUBLE) , INTENT(IN)       :: PSH_PT(ELGP)        ! Shape functions at the point
+      REAL(DOUBLE)                    :: SOLID_POINT_TEMPERATURE
+
+! **********************************************************************************************************************************
+
+      IF (DEBUG(191) == 0) THEN
+         SOLID_POINT_TEMPERATURE = DOT_PRODUCT(PSH_PT, DT(1:ELGP,NT)) - TREF1
+      ELSE
+         SOLID_POINT_TEMPERATURE = TBAR(NT)
+      ENDIF
+
+! **********************************************************************************************************************************
+
+      END FUNCTION SOLID_POINT_TEMPERATURE
+
+! ##################################################################################################################################
+
+      SUBROUTINE HEXA8_EAS_SOLVE ( NRHS, RHS )
+
+! Overwrite RHS with inv(H)*RHS using the equilibrated Cholesky factor from BUILD_HEXA8_ASSUMED_STRAIN_DATA:
+! inv(H) = D * inv(D*H*D) * D
+
+      IMPLICIT NONE
+
+      INTEGER(LONG), INTENT(IN)       :: NRHS                ! Number of right hand side columns
+      REAL(DOUBLE) , INTENT(INOUT)    :: RHS(EAS_NUM_MODES,NRHS)
+
+      INTEGER(LONG)                   :: II                  ! Loop index
+      INTEGER(LONG)                   :: INFO                ! LAPACK status
+
+! **********************************************************************************************************************************
+
+      DO II=1,EAS_NUM_MODES
+         RHS(II,:) = EAS_HSCL(II)*RHS(II,:)
+      ENDDO
+
+      CALL DPOTRS ( 'U', EAS_NUM_MODES, NRHS, EAS_HFAC, EAS_NUM_MODES, RHS, EAS_NUM_MODES, INFO )
+      IF (INFO /= 0) THEN                                  ! DPOTRS only fails for invalid arguments
+         WRITE(ERR,1921) SUBR_NAME, EID, TYPE, INFO, EAS_NUM_MODES, NRHS
+         WRITE(F06,1921) SUBR_NAME, EID, TYPE, INFO, EAS_NUM_MODES, NRHS
+         FATAL_ERR = FATAL_ERR + 1
+         CALL OUTA_HERE ( 'Y' )
+      ENDIF
+
+      DO II=1,EAS_NUM_MODES
+         RHS(II,:) = EAS_HSCL(II)*RHS(II,:)
+      ENDDO
+
+! **********************************************************************************************************************************
+ 1921 FORMAT(' *ERROR  1921: PROGRAMMING ERROR IN SUBROUTINE ',A,' (HEXA8_EAS_SOLVE) FOR ELEMENT ',I8,', TYPE ',A,              &
+                    /,14X,' LAPACK DPOTRS RETURNED INFO = ',I8,' WITH N = ',I8,', NRHS = ',I8)
+
+      END SUBROUTINE HEXA8_EAS_SOLVE
+
+! ##################################################################################################################################
+
+      SUBROUTINE HEXA8_EAS_MODES ( XI, ETA, ZETA, DETJ_PT, MODES )
+
+! Q1/E21 enhanced strain modes at isoparametric point (XI,ETA,ZETA), in the Cartesian element frame and scaled by
+! det(J0)/det(J). The natural-frame modes Mnat (engineering strains, ordered xx,yy,zz,xy,yz,zx in xi,eta,zeta) are
+
+!   e_xixi    : xi,  xi*eta,  xi*zeta        e_xieta   : xi,  eta,  xi*zeta,  eta*zeta
+!   e_etaeta  : eta, eta*xi,  eta*zeta       e_etazeta : eta, zeta, eta*xi,   zeta*xi
+!   e_zetazeta: zeta, zeta*xi, zeta*eta      e_zetaxi  : zeta, xi,  zeta*eta, xi*eta
+
+! Modes 1-9 span the Wilson incompatible-mode (Q1/E9) strains. Each normal mode contains its own coordinate and no mode
+! contains a pure function of the other two coordinates, so no compatible strain field of the trilinear element can be
+! represented by the modes; the condensed stiffness therefore has only the 6 rigid body zero-energy modes.
+
+      IMPLICIT NONE
+
+      REAL(DOUBLE), INTENT(IN)        :: XI, ETA, ZETA       ! Isoparametric coordinates of the point
+      REAL(DOUBLE), INTENT(IN)        :: DETJ_PT             ! det(J) at the point
+      REAL(DOUBLE), INTENT(OUT)       :: MODES(6,EAS_NUM_MODES)
+
+      REAL(DOUBLE)                    :: MNAT(6,EAS_NUM_MODES)! Natural-frame modes
+
+! **********************************************************************************************************************************
+
+      MNAT = ZERO
+
+      MNAT(1, 1) = XI         ;   MNAT(2, 2) = ETA        ;   MNAT(3, 3) = ZETA
+      MNAT(4, 4) = XI         ;   MNAT(4, 5) = ETA
+      MNAT(5, 6) = ETA        ;   MNAT(5, 7) = ZETA
+      MNAT(6, 8) = ZETA       ;   MNAT(6, 9) = XI
+
+      MNAT(1,10) = XI*ETA     ;   MNAT(1,11) = XI*ZETA
+      MNAT(2,12) = ETA*XI     ;   MNAT(2,13) = ETA*ZETA
+      MNAT(3,14) = ZETA*XI    ;   MNAT(3,15) = ZETA*ETA
+
+      MNAT(4,16) = XI*ZETA    ;   MNAT(4,17) = ETA*ZETA
+      MNAT(5,18) = ETA*XI     ;   MNAT(5,19) = ZETA*XI
+      MNAT(6,20) = ZETA*ETA   ;   MNAT(6,21) = XI*ETA
+
+      MODES = (DETJ0/DETJ_PT)*MATMUL(EAS_T0, MNAT)
+
+! **********************************************************************************************************************************
+
+      END SUBROUTINE HEXA8_EAS_MODES
+
+! ##################################################################################################################################
+
+      SUBROUTINE SOLID_STRAIN_TRANSFORM ( JAC_INV, T )
+
+! Transformation T of engineering strains (xx,yy,zz,xy,yz,zx) from the isoparametric (xi,eta,zeta) frame to the Cartesian frame,
+! eps_kl = sum_pq (dxi_p/dx_k)*(dxi_q/dx_l)*eps_pq, with JAC_INV(k,p) = dxi_p/dx_k (inverse of JAC from subr JAC3D).
+
+      IMPLICIT NONE
+
+      REAL(DOUBLE), INTENT(IN)        :: JAC_INV(3,3)        ! Inverse Jacobian
+      REAL(DOUBLE), INTENT(OUT)       :: T(6,6)              ! Strain transformation
+
+      INTEGER(LONG), PARAMETER        :: IP(6) = (/ 1, 2, 3, 1, 2, 3 /)
+      INTEGER(LONG), PARAMETER        :: JP(6) = (/ 1, 2, 3, 2, 3, 1 /)
+      INTEGER(LONG)                   :: R, C, K_, L_, P_, Q_ ! Loop indices and strain component index pairs
+
+! **********************************************************************************************************************************
+
+      DO R=1,6
+         K_ = IP(R)   ;   L_ = JP(R)
+         DO C=1,6
+            P_ = IP(C)   ;   Q_ = JP(C)
+            IF (R <= 3) THEN                               ! Normal Cartesian strain
+               IF (C <= 3) THEN
+                  T(R,C) = JAC_INV(K_,P_)*JAC_INV(K_,P_)
+               ELSE
+                  T(R,C) = JAC_INV(K_,P_)*JAC_INV(K_,Q_)
+               ENDIF
+            ELSE                                           ! Engineering shear Cartesian strain
+               IF (C <= 3) THEN
+                  T(R,C) = TWO*JAC_INV(K_,P_)*JAC_INV(L_,P_)
+               ELSE
+                  T(R,C) = JAC_INV(K_,P_)*JAC_INV(L_,Q_) + JAC_INV(K_,Q_)*JAC_INV(L_,P_)
+               ENDIF
+            ENDIF
+         ENDDO
+      ENDDO
+
+! **********************************************************************************************************************************
+
+      END SUBROUTINE SOLID_STRAIN_TRANSFORM
 
 ! ##################################################################################################################################
 

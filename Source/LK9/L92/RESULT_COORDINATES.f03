@@ -563,7 +563,7 @@
       SUBROUTINE STR_TENSOR_TRANSFORM ( STRESS_TENSOR, STRESS_CORD_SYS )
 
 ! Transforms an input stress or strain tensor in input local elem coord sys to an output coord sys whose actual coord sys ID is
-! STRESS_CORD_SYS
+! STRESS_CORD_SYS (0 = basic). For strains, tensor shear strains (engineering shear / 2) must be used.
 
 ! The 3x3 transform matrix Tse which transforms a unit vector in elem coords (Ue) to a unit vector in stress output coords (Us) is:
 
@@ -575,10 +575,11 @@
 
 !                                                 Tse = Ts0*T0e = Ts0*Te0'                                             (2)
 !  and its transpose is Tes:
-!                                                 Tes = Te0*Ts0'                                                       (3)
+!                                                 Tes = Te0*Ts0' = Te0*T0s                                             (3)
 
 
-! where Te0 is output in subr ELMGMi as array TE.  With (2), eqn (1) becomes:
+! where Te0 is output in subr ELMGMi as array TE, so Ue = Te0*U0. RCORD(ICORD,4:12) stores T0s = Ts0' row by row, so U0 = T0s*Us.
+! Thus eqn (3) is evaluated as Tes = TE*T0S, using RCORD without transposing it. With (2), eqn (1) becomes:
 
 !                                                  Us = (Ts0*Te0')*Ue                                                  (4)
 
@@ -591,8 +592,8 @@
 ! where Sij = Sji and, for example Sxx is the normal stress in the x direction, Sxy is the shear stress in the xy plane, etc.
 ! Matrix Tse is used to transform this 2nd order stress tensor from element coords to output coords (Soo) via the equation:
 
-!                                                 Soo = Tse*See*Tse' = Tse'*See*Tes                                    (6)
-!                                                 ~         ~              ~
+!                                                 Soo = Tse*See*Tse' = Tse*See*Tes                                     (6)
+!                                                 ~         ~             ~
 
       USE PENTIUM_II_KIND, ONLY       :  BYTE, LONG, DOUBLE
       USE CONSTANTS_1, ONLY           :  ZERO, ONE
@@ -613,12 +614,11 @@
       INTEGER(LONG)                   :: K                 ! Counter
 
 
-      REAL(DOUBLE), INTENT(INOUT)     :: STRESS_TENSOR(3,3)! 2D stress tensor (eqn 6 above)
+      REAL(DOUBLE), INTENT(INOUT)     :: STRESS_TENSOR(3,3)! 3x3 stress or strain tensor: See on input, Soo on output (eqn 6)
       REAL(DOUBLE)                    :: DUM33(3,3)        ! Intermediate array used in calc outputs
-      REAL(DOUBLE)                    :: TS0(3,3)          ! Transform matrix from basic coords to stress output coords
-      REAL(DOUBLE)                    :: T0S(3,3)          ! TS0'
-      REAL(DOUBLE)                    :: TES(3,3)          ! Transform matrix from local elem coords to stress output coords
-      REAL(DOUBLE)                    :: TSE(3,3)          ! TES'
+      REAL(DOUBLE)                    :: T0S(3,3)          ! Transform matrix from stress output coords to basic
+      REAL(DOUBLE)                    :: TES(3,3)          ! Transform matrix from stress output coords to local elem coords
+      REAL(DOUBLE)                    :: TSE(3,3)          ! TES': local elem coords to stress output coords
 
 
 
@@ -634,7 +634,7 @@
           T0S(I,I) = ONE
         ENDDO
 
-      ELSE                                                 ! Need to transform ES mat'l matrix to basic coords
+      ELSE                                                 ! Get T0S for STRESS_CORD_SYS from RCORD
 
         ICORD = 0
         DO I=1,NCORD                                       ! Get the internal coord system ID for STRESS_CORD_SYS
@@ -646,17 +646,17 @@
 
         IF (ICORD > 0) THEN                                ! STRESS_CORD_SYS was found so do transformation
 
-          DO I=1,3                                         ! Get TOS from RCORD array
+          DO I=1,3                                         ! RCORD stores output-to-basic, as in ROT_AXES_MATL_TO_LOC
             DO J=1,3
               K = 3 + 3*(I-1) + J
-              TS0(I,J) = RCORD(ICORD,K)
-              T0S(J,I) = TS0(I,J)
+              T0S(I,J) = RCORD(ICORD,K)
             ENDDO
           ENDDO
 
         ELSE                                               ! STRESS_CORD_SYS was not found leave tensor in local elem system
 
           WRITE(F06,9101) STRESS_CORD_SYS
+          RETURN
 
         ENDIF
 
@@ -674,9 +674,6 @@
                                                            ! Transform input stress tensor from e coords to o coords
       CALL MATMULT_FFF (STRESS_TENSOR, TES, 3, 3, 3, DUM33 )
       CALL MATMULT_FFF (TSE, DUM33, 3, 3, 3, STRESS_TENSOR )
-
-
-
 
       RETURN
 
